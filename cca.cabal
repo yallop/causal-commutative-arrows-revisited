@@ -1,0 +1,18 @@
+Name:           cca
+Version:        0.0.1
+Build-Type:     Simple
+License:        MIT
+Cabal-version:  >= 1.8
+Author:         Jeremy Yallop <yallop@gmail.com>
+
+library
+  build-depends:   base
+  exposed-modules: Control.CCA.Instances
+  ghc-options:     -O2 
+  Hs-Source-Dirs:  src
+
+Executable test
+  build-depends:  criterion, cca, base
+  Main-is:        Main.hs
+  ghc-options:    -O2 
+  Hs-Source-Dirs: test
