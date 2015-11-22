@@ -26,7 +26,7 @@ instance Category CCNF_B where
    ArrB g    . LoopB f i = LoopB (\a -> let (x,y) = f a in (g x, y)) i
    LoopB f i . ArrB h    = LoopB (\ ~(x,y) -> f (h x, y)) i
    LoopB f i . LoopB g j = LoopB
-      ((\(a, ((b, d), (c, e))) ->
+      ((\ ~(a, ((b, d), (c, e))) ->
          let (a', b') = g (a, (d, e))
              ((e'',(a'',b'')),(c'',d'')) = (f (a', (b, c)), b')
          in (e'',((a'',c''),(b'',d'')))))
@@ -38,7 +38,7 @@ instance Arrow CCNF_B where
    {-# INLINE arr #-}
 
    first (ArrB f) = ArrB (\ ~(x,y) -> (f x, y))
-   first (LoopB f i) = LoopB (\((a, b), c) ->
+   first (LoopB f i) = LoopB (\ ~((a, b), c) ->
                                let (a', b') = f (a, c)
                                in ((a', b), b')) i
    {-# INLINE first #-}
