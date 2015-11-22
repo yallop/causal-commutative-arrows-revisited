@@ -12,7 +12,7 @@ library
   Hs-Source-Dirs:  src
 
 Executable test
-  build-depends:  criterion, cca, base
+  build-depends:  criterion, cca, base, CCA, template-haskell
   Main-is:        Main.hs
   ghc-options:    -O2 
   Hs-Source-Dirs: test

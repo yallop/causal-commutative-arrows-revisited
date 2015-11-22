@@ -1,13 +1,15 @@
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
-{-# LANGUAGE GADTs, TypeOperators, KindSignatures #-}
+{-# LANGUAGE TemplateHaskell, GADTs, TypeOperators, KindSignatures #-}
 
 module Main where
 
 import Prelude hiding (init, exp, id, (.))
 import Control.Arrow
 import Control.Category
+import Control.CCA.CCNF (normOpt)
 import Control.CCA.Instances
 import Criterion.Main
+import qualified Sample as S
 
 integral :: ArrowInit arr => Double `arr` Double
 integral = loop (arr (\ (v, i) -> i + dt * v) >>>
@@ -78,6 +80,16 @@ exp3 = runSF (observeD exp)
 exp_normalized_direct_apply inp elem = exp4 inp !! elem
 exp4 = applyCCNF_D exp
 
+exp_normalized_th inp elem = exp5 inp !! elem
+exp5 = applyCCNF $(normOpt S.exp)
+applyCCNF :: (c, (a, c) -> (b, c)) -> [a] -> [b]
+applyCCNF (i, f) = runCCNF i f
+  where
+   runCCNF :: e -> ((b,e) -> (c,e)) -> [b] -> [c]
+   runCCNF i f = g i
+     where g i (x:xs) = let (y, i') = f (x, i)
+                        in y : g i' xs
+
 exp_element = 30000
 
 main :: IO ()
@@ -93,5 +105,8 @@ main = defaultMain [
 
                , bench "exp (loopD-normalized, with runCCNF)" $
                  nf (exp_normalized_direct_apply inp) exp_element
+
+               , bench "exp (loopD-normalized, with CCA TH)" $
+                 nf (exp_normalized_th inp) exp_element
                ]
   ]
