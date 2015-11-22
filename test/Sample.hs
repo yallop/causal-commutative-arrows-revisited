@@ -103,8 +103,32 @@ testOsc ::
 testOsc f = constant 1 >>> f 440
  
 {-# LINE 42 "Sample.as" #-}
-sciFi :: (ArrowInit a) => a () Double
+fibA :: (ArrowInit arr) => arr () Integer
 {-# LINE 43 "Sample.as" #-}
+fibA
+  = (loop
+       (((arr'
+            [|
+              (\ (_, ~(d1, d2)) ->
+                 let {-# LINE 44 "Sample.as" #-}
+                     r = d2 + d1
+                   in (d2, r))
+              |]
+            (\ (_, ~(d1, d2)) ->
+               let {-# LINE 44 "Sample.as" #-}
+                   r = d2 + d1
+                 in (d2, r))
+            >>> first (init' [| 0 |] 0))
+           >>>
+           arr' [| (\ (d1, r) -> (r, (d1, r))) |] (\ (d1, r) -> (r, (d1, r))))
+          >>>
+          (first (init' [| 1 |] 1) >>>
+             arr' [| (\ (d2, (d1, r)) -> (r, (d1, d2))) |]
+               (\ (d2, (d1, r)) -> (r, (d1, d2))))))
+ 
+{-# LINE 49 "Sample.as" #-}
+sciFi :: (ArrowInit a) => a () Double
+{-# LINE 50 "Sample.as" #-}
 sciFi
   = (arr' [| (\ () -> 0) |] (\ () -> 0) >>>
        (oscSine 3.0 >>>
@@ -116,27 +140,27 @@ sciFi
               (\ (swp, und) -> und * 0.2 + swp + 1))
            >>> oscSine 440)
  
-{-# LINE 49 "Sample.as" #-}
+{-# LINE 56 "Sample.as" #-}
 robot :: (ArrowInit a) => a (Double, Double) Double
-{-# LINE 50 "Sample.as" #-}
+{-# LINE 57 "Sample.as" #-}
 robot
   = (arr'
        [|
          (\ inp ->
-            let {-# LINE 51 "Sample.as" #-}
+            let {-# LINE 58 "Sample.as" #-}
                 vr = snd inp
-                {-# LINE 52 "Sample.as" #-}
+                {-# LINE 59 "Sample.as" #-}
                 vl = fst inp
-                {-# LINE 53 "Sample.as" #-}
+                {-# LINE 60 "Sample.as" #-}
                 vz = vr + vl
               in ((vl, vr), vz))
          |]
        (\ inp ->
-          let {-# LINE 51 "Sample.as" #-}
+          let {-# LINE 58 "Sample.as" #-}
               vr = snd inp
-              {-# LINE 52 "Sample.as" #-}
+              {-# LINE 59 "Sample.as" #-}
               vl = fst inp
-              {-# LINE 53 "Sample.as" #-}
+              {-# LINE 60 "Sample.as" #-}
               vz = vr + vl
             in ((vl, vr), vz))
        >>>
@@ -147,12 +171,12 @@ robot
           arr'
             [|
               (\ (t, vz) ->
-                 let {-# LINE 55 "Sample.as" #-}
+                 let {-# LINE 62 "Sample.as" #-}
                      t' = t / 10
                    in ((t', vz), (t', vz)))
               |]
             (\ (t, vz) ->
-               let {-# LINE 55 "Sample.as" #-}
+               let {-# LINE 62 "Sample.as" #-}
                    t' = t / 10
                  in ((t', vz), (t', vz))))
          >>>
@@ -170,10 +194,10 @@ robot
               arr' [| (\ (y, x) -> x / 2 + y / 2) |]
                 (\ (y, x) -> x / 2 + y / 2)))
  
-{-# LINE 60 "Sample.as" #-}
+{-# LINE 67 "Sample.as" #-}
 testRobot ::
           (ArrowInit a) => a (Double, Double) Double -> a () Double
-{-# LINE 61 "Sample.as" #-}
+{-# LINE 68 "Sample.as" #-}
 testRobot bot
   = ((sine 2 >>> arr' [| (\ u -> (u, 1 - u)) |] (\ u -> (u, 1 - u)))
        >>> robot)

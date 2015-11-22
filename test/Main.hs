@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
-{-# LANGUAGE TemplateHaskell, GADTs, TypeOperators, KindSignatures #-}
+{-# LANGUAGE TemplateHaskell, GADTs, TypeOperators, KindSignatures, Arrows #-}
 
 module Main where
 
@@ -30,6 +30,13 @@ fixA = \f -> loop (second f >>> arr snd >>> arr dup)
 exp :: ArrowInit arr => () `arr` Double
 exp = fixA (integral >>> arr (+1))
 {-# INLINE exp #-}
+
+fibA :: ArrowInit arr => arr () Integer
+fibA = proc _ -> do
+   rec let r = d2 + d1
+       d1 <- init 0 -< d2
+       d2 <- init 1 -< r
+   returnA -< r
 
 -- Causal stream transformers 
 newtype SF a b = SF { unSF :: a -> (b, SF a b) }
@@ -78,6 +85,19 @@ exp_normalized_direct_apply elem = nthCCNF_D elem exp
 
 exp_normalized_th_nth elem = nth' elem $(normOpt S.exp)
 
+
+-- various approaches to evaluating 'fibA'
+fibA_unnormalized elem = nth elem fibA
+
+fibA_normalized_b elem = nth elem (observeB fibA)
+
+fibA_normalized_d elem = nth elem (observeD fibA)
+
+fibA_normalized_direct_apply elem = nthCCNF_D elem fibA
+
+fibA_normalized_th_nth :: Int -> Int
+fibA_normalized_th_nth elem = nth' elem $(normOpt S.fibA)
+
 nth :: Int -> SF () a -> a
 nth n (SF f) = x `seq` if n == 0 then x else nth (n - 1) f'
   where (x, f') = f ()
@@ -96,6 +116,7 @@ nthCCNF_D n (LoopD i f) = aux n i
       where (x, i') = f ((), i)
 
 exp_element = 30000
+fibA_element = 30000
 
 main :: IO ()
 main = defaultMain [
@@ -113,5 +134,21 @@ main = defaultMain [
 
                , bench "exp (loopD-normalized, with CCA TH)" $
                  nf (exp_normalized_th_nth) exp_element
+               ],
+
+  bgroup "fibA" [ bench "fibA (unnormalized)" $
+                 nf (fibA_unnormalized) fibA_element
+
+               , bench "fibA (loopB-normalized)" $
+                 nf (fibA_normalized_b) fibA_element
+
+               , bench "fibA (loopD-normalized)" $
+                 nf (fibA_normalized_d) fibA_element
+
+               , bench "fibA (loopD-normalized, with runCCNF)" $
+                 nf (fibA_normalized_direct_apply) fibA_element
+
+               , bench "fibA (loopD-normalized, with CCA TH)" $
+                 nf (fibA_normalized_th_nth) fibA_element
                ]
   ]
