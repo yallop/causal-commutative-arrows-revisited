@@ -68,45 +68,50 @@ runSF (SF f) (x:xs) = let (y, f') = f x
                       in y : runSF f' xs
 
 -- various approaches to evaluating 'exp'
-exp_unnormalized inp elem = exp1 inp !! elem
-exp1 = runSF exp
+exp_unnormalized elem = nth elem exp 
 
-exp_normalized_b inp elem = exp2 inp !! elem
-exp2 = runSF (observeB exp)
+exp_normalized_b elem = nth elem (observeB exp)
 
-exp_normalized_d inp elem = exp3 inp !! elem
-exp3 = runSF (observeD exp)
+exp_normalized_d elem = nth elem (observeD exp)
 
-exp_normalized_direct_apply inp elem = exp4 inp !! elem
-exp4 = applyCCNF_D exp
+exp_normalized_direct_apply elem = nthCCNF_D elem exp
 
-exp_normalized_th inp elem = exp5 inp !! elem
-exp5 = applyCCNF $(normOpt S.exp)
-applyCCNF :: (c, (a, c) -> (b, c)) -> [a] -> [b]
-applyCCNF (i, f) = runCCNF i f
+exp_normalized_th_nth elem = nth' elem $(normOpt S.exp)
+
+nth :: Int -> SF () a -> a
+nth n (SF f) = x `seq` if n == 0 then x else nth (n - 1) f'
+  where (x, f') = f ()
+
+nth' :: Int -> (b, ((), b) -> (a, b)) -> a
+nth' n (i, f) = aux n i
   where
-   runCCNF :: e -> ((b,e) -> (c,e)) -> [b] -> [c]
-   runCCNF i f = g i
-     where g i (x:xs) = let (y, i') = f (x, i)
-                        in y : g i' xs
+    aux n i = x `seq` if n == 0 then x else aux (n-1) i'
+      where (x, i') = f ((), i)
+
+nthCCNF_D :: Int -> CCNF_D () a -> a
+nthCCNF_D n (ArrD f) = f ()
+nthCCNF_D n (LoopD i f) = aux n i
+  where
+    aux n i = x `seq` if n == 0 then x else aux (n-1) i'
+      where (x, i') = f ((), i)
 
 exp_element = 30000
 
 main :: IO ()
 main = defaultMain [
   bgroup "exp" [ bench "exp (unnormalized)" $
-                 nf (exp_unnormalized inp) exp_element
+                 nf (exp_unnormalized) exp_element
 
                , bench "exp (loopB-normalized)" $
-                 nf (exp_normalized_b inp) exp_element
+                 nf (exp_normalized_b) exp_element
 
                , bench "exp (loopD-normalized)" $
-                 nf (exp_normalized_d inp) exp_element
+                 nf (exp_normalized_d) exp_element
 
                , bench "exp (loopD-normalized, with runCCNF)" $
-                 nf (exp_normalized_direct_apply inp) exp_element
+                 nf (exp_normalized_direct_apply) exp_element
 
                , bench "exp (loopD-normalized, with CCA TH)" $
-                 nf (exp_normalized_th inp) exp_element
+                 nf (exp_normalized_th_nth) exp_element
                ]
   ]
