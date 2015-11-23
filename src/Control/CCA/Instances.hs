@@ -94,9 +94,9 @@ instance Category CCNF_D where
    LoopD i g . ArrD f    = LoopD i (g . first f)
    ArrD g    . LoopD i f = LoopD i (first g . f)
    LoopD j g . LoopD i f = LoopD (i, j)
-                           (\ ~(a,(b,c)) ->
-                             let ((x , y) ) = (f (a,b)) in
-                             let (x', y') =  g (x, c) in
+                           (\ (a,(b,c)) ->
+                             let (x , y) = f (a,b)
+                                 (x', y') =  g (x, c) in
                              (x', (y, y')))
    {-# INLINE (.) #-}
   
@@ -105,15 +105,15 @@ instance Arrow CCNF_D where
    {-# INLINE arr #-}
 
    first (ArrD f) = ArrD (first f)
-   first (LoopD i f) = LoopD i (\ ~((x , y), z) ->
+   first (LoopD i f) = LoopD i (\ ((x , y), z) ->
                                  let (x', y') =  f (x , z)
                                  in ((x', y), y'))
    {-# INLINE first #-}
 
 instance ArrowLoop CCNF_D where
-   loop (ArrD f ) = ArrD (trace f )
+   loop (ArrD f ) = ArrD (trace f)
    loop (LoopD i f) = LoopD i (trace
-                               ((\f ~((x , y), z) ->
+                               ((\f ((x , y), z) ->
                                   let ((x', y'), z') = f ((x , z ), y)
                                   in ((x', z'), y')) f))
    {-# INLINE loop #-}
