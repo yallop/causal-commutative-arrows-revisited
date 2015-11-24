@@ -103,19 +103,25 @@ fibA_normalized_th_nth elem = nth' elem $(normOpt S.fibA)
 nth :: Int -> SF () a -> a
 nth n (SF f) = x `seq` if n == 0 then x else nth (n - 1) f'
   where (x, f') = f ()
+{-# INLINE nth #-}
 
 nth' :: Int -> (b, ((), b) -> (a, b)) -> a
 nth' n (i, f) = aux n i
   where
     aux n i = x `seq` if n == 0 then x else aux (n-1) i'
       where (x, i') = f ((), i)
+    {-# INLINE aux #-}
+{-# INLINE nth' #-}
 
 nthCCNF_D :: Int -> CCNF_D () a -> a
 nthCCNF_D n (ArrD f) = f ()
 nthCCNF_D n (LoopD i f) = aux n i
   where
     aux n i = x `seq` if n == 0 then x else aux (n-1) i'
-      where (x, i') = f ((), i)
+     where (x, i') = f ((), i)
+    {-# INLINE aux #-}
+
+{-# INLINE nthCCNF_D #-}
 
 exp_element = 30000
 fibA_element = 30000
