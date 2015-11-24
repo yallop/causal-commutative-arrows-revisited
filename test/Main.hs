@@ -16,8 +16,10 @@ integral = loop (arr (\ (v, i) -> i + dt * v) >>>
                  init 0 >>> arr dup)
 {-# INLINE integral #-}
 
-dt :: Double
-dt = 0.0001
+sr = 44100 :: Int
+dt = 1 / (fromIntegral sr)
+-- dt :: Double
+-- dt = 0.0001
 {-# INLINE dt #-}
 
 inp :: [()]
