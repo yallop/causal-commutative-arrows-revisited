@@ -20,7 +20,6 @@ data CCNF_B :: * -> * -> * where
 -- ArrowLoop, Arrow and Category)
 instance Category CCNF_B where
    id = ArrB id
-   {-# INLINE id #-}
 
    ArrB g    . ArrB f    = ArrB (g . f)
    ArrB g    . LoopB f i = LoopB (\a -> let (x,y) = f a in (g x, y)) i
@@ -31,17 +30,14 @@ instance Category CCNF_B where
              ((e'',(a'',b'')),(c'',d'')) = (f (a', (b, c)), b')
          in (e'',((a'',c''),(b'',d'')))))
       (i,j)
-   {-# INLINE (.) #-}
 
 instance Arrow CCNF_B where
    arr = \f -> ArrB (arr f)
-   {-# INLINE arr #-}
 
    first (ArrB f) = ArrB (\ ~(x,y) -> (f x, y))
    first (LoopB f i) = LoopB (\ ~((a, b), c) ->
                                let (a', b') = f (a, c)
                                in ((a', b), b')) i
-   {-# INLINE first #-}
 
 instance ArrowLoop CCNF_B where
    loop (ArrB f)  = LoopB (\ ~(a,(b,c)) ->
@@ -52,13 +48,11 @@ instance ArrowLoop CCNF_B where
                                let (((a', b'), (d', e'))) = (f ((a, b), (d, e)))
                                in (a', ((b', d'), (c, e')))))
                       ((), i)
-   {-# INLINE loop #-}
 
 -- evaluate a term in CCNF_B normal form at an ArrowInit instance
 observeB :: (ArrowInit arr) => CCNF_B a b -> (a `arr` b)
 observeB (ArrB f) = arr f
 observeB (LoopB f i) = loop (arr f >>> second (second (init i)))
-{-# INLINE observeB #-}
 
 -- loopD-based CCA normal form
 data CCNF_D :: * -> * -> * where
@@ -69,7 +63,6 @@ data CCNF_D :: * -> * -> * where
 observeD :: ArrowInit arr => CCNF_D a b -> (a `arr` b)
 observeD (ArrD f) = arr f
 observeD (LoopD i f) = loop (arr f >>> second (init i))
-{-# INLINE observeD #-}
 
 -- apply a normalized (CCNF_D) computation to transform a stream
 applyCCNF_D :: CCNF_D a b -> [a] -> [b]
@@ -88,7 +81,6 @@ applyCCNF_D (LoopD i f) = runCCNF i f
 -- (adapted from Paul Liu's dissertation)
 instance Category CCNF_D where
    id = ArrD id
-   {-# INLINE id #-}
 
    ArrD g    . ArrD f    = ArrD (g . f)
    LoopD i g . ArrD f    = LoopD i (g . first f)
@@ -98,17 +90,14 @@ instance Category CCNF_D where
                              let (x , y) = f (a,b)
                                  (x', y') =  g (x, c) in
                              (x', (y, y')))
-   {-# INLINE (.) #-}
   
 instance Arrow CCNF_D where
    arr = ArrD
-   {-# INLINE arr #-}
 
    first (ArrD f) = ArrD (first f)
    first (LoopD i f) = LoopD i (\ ((x , y), z) ->
                                  let (x', y') =  f (x , z)
                                  in ((x', y), y'))
-   {-# INLINE first #-}
 
 instance ArrowLoop CCNF_D where
    loop (ArrD f ) = ArrD (trace f)
@@ -116,26 +105,20 @@ instance ArrowLoop CCNF_D where
                                ((\f ((x , y), z) ->
                                   let ((x', y'), z') = f ((x , z ), y)
                                   in ((x', z'), y')) f))
-   {-# INLINE loop #-}
 
 
 instance ArrowInit CCNF_B where
    init = \i -> LoopB ((\ ~(b,(a,c)) -> (c,(a,b)))) i
-   {-# INLINE init #-}
 
 instance ArrowInit CCNF_D where
    init i = LoopD i swap
-   {-# INLINE init #-}
 
 -- auxiliary definitions
 trace :: ((b, d) -> (c, d)) -> b -> c
 trace = \f b -> let (c, d) = f (b, d) in c
-{-# INLINE trace #-}
 
 swap ::   (a,b) -> (b,a)
 swap = \ ~(a,b) -> (b,a)
-{-# INLINE swap #-}
 
 dup :: a -> (a,a)
 dup = \a -> (a,a)
-{-# INLINE dup #-}
