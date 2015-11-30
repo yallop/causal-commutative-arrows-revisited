@@ -34,6 +34,18 @@ fibA = proc _ -> do
        d2 <- init 1 -< r
    returnA -< r
 
+sine :: ArrowInit a => Double -> a () Double
+sine freq = proc _ -> do
+  rec x <- init i -< r
+      y <- init 0 -< x 
+      let r = c * x - y
+  returnA -< r
+  where
+    omh = 2 * pi / (fromIntegral sr) * freq
+    i = sin omh
+    c = 2 * cos omh
+{-# INLINE sine #-}
+
 -- Causal stream transformers 
 newtype SF a b = SF { unSF :: a -> (b, SF a b) }
 
@@ -77,6 +89,22 @@ exp_normalized_direct_apply elem = nthCCNF_D elem exp
 exp_normalized_th_nth elem = nth' elem $(normOpt S.exp)
 
 
+-- various approaches to evaluating 'sine'
+sine_unnormalized :: Int -> Double
+sine_unnormalized elem = nth elem (sine 47.0)
+
+sine_normalized_b :: Int -> Double
+sine_normalized_b elem = nth elem (observeB (sine 47.0))
+
+sine_normalized_d :: Int -> Double
+sine_normalized_d elem = nth elem (observeD (sine 47.0))
+
+sine_normalized_direct_apply :: Int -> Double
+sine_normalized_direct_apply elem = nthCCNF_D elem (sine 47.0)
+
+sine_normalized_th_nth :: Int -> Double
+sine_normalized_th_nth elem = nth' elem $(normOpt (S.sine 47.0))
+
 -- various approaches to evaluating 'fibA'
 fibA_unnormalized :: Int -> Integer
 fibA_unnormalized elem = nth elem fibA
@@ -113,9 +141,11 @@ nthCCNF_D n (LoopD i f) = aux n i
 
 exp_element = 30000
 fibA_element = 30000
+sine_element = 30000
 
 main :: IO ()
-main = defaultMain [
+main = do
+ defaultMain [
   bgroup "exp" [ bench "exp (unnormalized)" $
                  nf (exp_unnormalized) exp_element
 
@@ -130,6 +160,22 @@ main = defaultMain [
 
                , bench "exp (loopD-normalized, with CCA TH)" $
                  nf (exp_normalized_th_nth) exp_element
+               ],
+
+  bgroup "sine" [ bench "sine (unnormalized)" $
+                 nf (sine_unnormalized) sine_element
+
+               , bench "sine (loopB-normalized)" $
+                 nf (sine_normalized_b) sine_element
+
+               , bench "sine (loopD-normalized)" $
+                 nf (sine_normalized_d) sine_element
+
+               , bench "sine (loopD-normalized, with runCCNF)" $
+                 nf (sine_normalized_direct_apply) sine_element
+
+               , bench "sine (loopD-normalized, with CCA TH)" $
+                 nf (sine_normalized_th_nth) sine_element
                ],
 
   bgroup "fibA" [ bench "fibA (unnormalized)" $
