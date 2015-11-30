@@ -78,15 +78,19 @@ exp_normalized_th_nth elem = nth' elem $(normOpt S.exp)
 
 
 -- various approaches to evaluating 'fibA'
+fibA_unnormalized :: Int -> Integer
 fibA_unnormalized elem = nth elem fibA
 
+fibA_normalized_b :: Int -> Integer
 fibA_normalized_b elem = nth elem (observeB fibA)
 
+fibA_normalized_d :: Int -> Integer
 fibA_normalized_d elem = nth elem (observeD fibA)
 
+fibA_normalized_direct_apply :: Int -> Integer
 fibA_normalized_direct_apply elem = nthCCNF_D elem fibA
 
-fibA_normalized_th_nth :: Int -> Int
+fibA_normalized_th_nth :: Int -> Integer
 fibA_normalized_th_nth elem = nth' elem $(normOpt S.fibA)
 
 nth :: Int -> SF () a -> a
