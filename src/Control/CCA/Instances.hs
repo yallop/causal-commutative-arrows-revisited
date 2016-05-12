@@ -86,46 +86,58 @@ instance Category CCNF_D where
    LoopD i g . ArrD f    = LoopD i (g . first f)
    ArrD g    . LoopD i f = LoopD i (first g . f)
    LoopD j g . LoopD i f = LoopD (i, j) (assoc' (juggle' (first g) . first f))
+   {-# INLINE (.) #-}
 
 instance Arrow CCNF_D where
    arr = ArrD
 
    first (ArrD f) = ArrD (first f)
    first (LoopD i f) = LoopD i (juggle' (first f))
+   {-# INLINE first #-}
 
 instance ArrowLoop CCNF_D where
    loop (ArrD f ) = ArrD (trace f)
    loop (LoopD i f) = LoopD i (trace (juggle' f))
+   {-# INLINE loop #-}
 
 instance ArrowInit CCNF_B where
    init = \i -> LoopB ((\ ~(b,(a,c)) -> (c,(a,b)))) i
 
 instance ArrowInit CCNF_D where
    init i = LoopD i swap
+   {-# INLINE init #-}
 
 -- auxiliary definitions
 trace :: ((b, d) -> (c, d)) -> b -> c
 trace = \f b -> let (c, d) = f (b, d) in c
+{-# INLINE trace #-}
 
 swap ::   (a,b) -> (b,a)
 swap = \ ~(a,b) -> (b,a)
+{-# INLINE swap #-}
 
 dup :: a -> (a,a)
 dup = \a -> (a,a)
+{-# INLINE dup #-}
 
 assoc :: ((a, b), c) -> (a, (b, c))
 assoc    ((a, b), c) =  (a, (b, c))
+{-# INLINE assoc #-}
 
 cossa :: (a, (b, c)) -> ((a, b), c)
 cossa    (a, (b, c)) =  ((a, b), c)
+{-# INLINE cossa #-}
 
 assoc' :: (((a, b), c) -> ((d, e), f)) ->
           ((a, (b, c)) -> (d, (e, f)))
 assoc' f = assoc . f . cossa
+{-# INLINE assoc' #-}
 
 juggle :: ((a, b), c) -> ((a, c), b)
 juggle    ((a, b), c) =  ((a, c), b)
+{-# INLINE juggle #-}
 
 juggle':: (((a, c), b) -> ((d, e), f)) ->
           (((a, b), c) -> ((d, f), e))
 juggle' f = juggle . f . juggle
+{-# INLINE juggle' #-}
