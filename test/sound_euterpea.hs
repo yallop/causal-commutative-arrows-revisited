@@ -1,11 +1,12 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, EmptyDataDecls, FlexibleInstances, FlexibleContexts, BangPatterns, ExistentialQuantification, ScopedTypeVariables, Arrows #-}
-import Prelude hiding (init,id,(.))
+import Prelude hiding (id,(.))
 import Control.Category
 import Control.Arrow
-import Control.CCA.Instances
+import Control.Arrow.Operations
 import Data.Array.Base (unsafeAt)
 import Data.Array.Unboxed
 import GHC.IO
+import System.Environment
 import System.Random
 import Foreign.Marshal
 import Foreign.Ptr
@@ -15,9 +16,7 @@ import Data.Audio
 import Data.Int
 
 
--- data SF a b = SF { runSF :: a -> (b, SF a b) }
-delay :: ArrowInit a => b -> a b b
-delay = init
+data SF a b = SF { runSF :: a -> (b, SF a b) }
 
 class Clock p where
     rate :: p -> Double  -- sampling rate
@@ -34,7 +33,7 @@ instance Clock CtrRate where
 type AudSF a b  = SigFun AudRate a b
 type CtrSF a b  = SigFun CtrRate a b
 
-newtype Signal clk a b = Signal { strip :: CCNF_D a b } deriving (Category, Arrow, ArrowLoop, ArrowInit)
+newtype Signal clk a b = Signal { strip :: SF a b } deriving (Category, Arrow, ArrowLoop, ArrowCircuit)
 type SigFun clk a b = Signal clk a b
 
 data Tab = Tab [Double] !Int !(UArray Int Double)
@@ -247,8 +246,6 @@ flute dur amp fqc press breath =
     
 tFlute = outFile "tFlute.wav" 5 $ flute 5 0.7 440 0.99 0.2 
 
-main = tFlute
-
 outFile = outFileHelp id
 
 outFileHelp :: forall a p. (AudioSample a, Clock p) =>
@@ -295,13 +292,7 @@ toSamples dur sf =
   let sr          = rate     (undefined :: p)
       numChannels = numChans (undefined :: a)
       numSamples  = truncate (dur * sr) * numChannels
-  in take numSamples $ concatMap collapse $ unfoldCCNF $ strip sf
-
-unfoldCCNF :: CCNF_D () a -> [a]
-unfoldCCNF = flip applyCCNF_D inp
-  where inp = () : inp
-
-{-
+  in take numSamples $ concatMap collapse $ unfold $ strip sf
 
 run :: SF a b -> [a] -> [b]
 run _ [] = []
@@ -312,7 +303,6 @@ run (SF f) (x:xs) =
 unfold :: SF () a -> [a]
 unfold = flip run inp
   where inp = () : inp
-
 
 instance Category SF where
   id = SF h where h x = (x, SF h)
@@ -360,6 +350,20 @@ instance ArrowCircuit SF where
   delay i = SF (f i)
     where f i x = (i, SF (f x))
 
--}
+shepard :: Double -> AudSF () Double
+shepard seconds = if seconds <= 0.0 then arr (const 0.0) else proc _ -> do
+    f <- envLineSeg [800,100,100] [4.0, seconds] -< () -- frequency
+    e <- envLineSeg [0, 1, 0, 0] [2.0, 2.0, seconds] -< () -- volume envelope
+    s <- osc sineTable 0 -< f -- descending sine wave tone
+    sRest <- delayLine 0.5 <<< shepard (seconds-0.5) -< () -- delayed other tones
+    returnA -< (e * s * 0.1) + sRest
 
+tShepard = outFile "tShepard.wav" 16.0 (shepard 16.0)
 
+main = do
+  cmd <- getProgName
+  arg <- getArgs
+  case arg of
+    ["flute"] -> tFlute
+    ["shepard"] -> tShepard
+    _ -> error $ "USAGE: " ++ cmd ++ " [flute|shepard]"
