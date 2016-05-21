@@ -45,8 +45,9 @@ unfoldTH (i, f) = next i
              in x : next i' 
 
 unfoldCCNF_D :: CCNF_D () a -> [a]
-unfoldCCNF_D = flip applyCCNF_D inp
+unfoldCCNF_D (ArrD f) = map f inp
   where inp = () : inp
+unfoldCCNF_D (LoopD i f) = unfoldTH (i, f)
 
 unfoldNF = unfoldCCNF_D 
 
