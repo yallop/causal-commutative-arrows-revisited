@@ -126,11 +126,11 @@ dup = \a -> (a,a)
 {-# INLINE dup #-}
 
 assoc :: ((a, b), c) -> (a, (b, c))
-assoc    ((a, b), c) =  (a, (b, c))
+assoc    (~(a, b), c) =  (a, (b, c))
 {-# INLINE assoc #-}
 
 cossa :: (a, (b, c)) -> ((a, b), c)
-cossa    (a, (b, c)) =  ((a, b), c)
+cossa    (a, ~(b, c)) =  ((a, b), c)
 {-# INLINE cossa #-}
 
 assoc' :: (((a, b), c) -> ((d, e), f)) ->
@@ -139,7 +139,7 @@ assoc' f = assoc . f . cossa
 {-# INLINE assoc' #-}
 
 juggle :: ((a, b), c) -> ((a, c), b)
-juggle    ((a, b), c) =  ((a, c), b)
+juggle    (~(a, b), c) =  ((a, c), b)
 {-# INLINE juggle #-}
 
 juggle':: (((a, c), b) -> ((d, e), f)) ->
