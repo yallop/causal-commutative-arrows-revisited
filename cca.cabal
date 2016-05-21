@@ -6,21 +6,15 @@ Cabal-version:  >= 1.8
 Author:         Jeremy Yallop <yallop@gmail.com>
 
 library
-  build-depends:   base
-  exposed-modules: Control.CCA.Instances
+  build-depends:   CCA, base, hermit, kure, transformers, ghc, ghc-prim, containers
+  exposed-modules: Control.CCA.Instances, Reduction
   ghc-options:     -O2 -funfolding-use-threshold=512
   Hs-Source-Dirs:  src
 
-Executable sound
+Executable play
   build-depends:  cca, base, CCA, template-haskell, HCodecs, array, random
-  Main-is:        sound.hs
-  ghc-options:    -O2 -funfolding-use-threshold=2048 -fno-full-laziness
-  Hs-Source-Dirs: test
-
-Executable sound_euterpea
-  build-depends:  base, template-haskell, HCodecs, array, random, arrows
-  Main-is:        sound_euterpea.hs
-  ghc-options:    -O0
+  Main-is:        Play.hs
+  ghc-options:    -O2 -funfolding-use-threshold=512
   Hs-Source-Dirs: test
 
 Executable test

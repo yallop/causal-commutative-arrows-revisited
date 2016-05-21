@@ -5,11 +5,9 @@ module Control.CCA.Instances where
 
 import Control.Category
 import Control.Arrow
+import Control.CCA.Types 
 
 import Prelude hiding ((.), init, id)
-
-class ArrowLoop arr => ArrowInit arr where
-  init :: a -> (a `arr` a)
 
 -- loopB-based CCA normal form
 data CCNF_B :: * -> * -> * where
@@ -81,31 +79,38 @@ applyCCNF_D (LoopD i f) = runCCNF i f
 -- (adapted from Paul Liu's dissertation)
 instance Category CCNF_D where
    id = ArrD id
+   
 
    ArrD g    . ArrD f    = ArrD (g . f)
    LoopD i g . ArrD f    = LoopD i (g . first f)
    ArrD g    . LoopD i f = LoopD i (first g . f)
    LoopD j g . LoopD i f = LoopD (i, j) (assoc' (juggle' (first g) . first f))
-   {-# INLINE (.) #-}
+   
 
 instance Arrow CCNF_D where
    arr = ArrD
-
+   
    first (ArrD f) = ArrD (first f)
    first (LoopD i f) = LoopD i (juggle' (first f))
-   {-# INLINE first #-}
+   
+   second f = arr swap >>> first f >>> arr swap
+   
+   f *** g = first f >>> second g
+   
+   f &&& g = arr (\x -> (x, x)) >>> f *** g
+   
 
 instance ArrowLoop CCNF_D where
    loop (ArrD f ) = ArrD (trace f)
    loop (LoopD i f) = LoopD i (trace (juggle' f))
-   {-# INLINE loop #-}
+   
 
 instance ArrowInit CCNF_B where
    init = \i -> LoopB ((\ ~(b,(a,c)) -> (c,(a,b)))) i
 
 instance ArrowInit CCNF_D where
    init i = LoopD i swap
-   {-# INLINE init #-}
+   
 
 -- auxiliary definitions
 trace :: ((b, d) -> (c, d)) -> b -> c

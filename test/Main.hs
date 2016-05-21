@@ -7,6 +7,7 @@ import Prelude hiding (init, exp, id, (.))
 import Control.Arrow
 import Control.Category
 import Control.CCA.CCNF (normOpt)
+import Control.CCA.Types
 import Control.CCA.Instances
 import Criterion.Main
 import qualified Sample as S
@@ -16,7 +17,7 @@ integral = loop (arr (\ (v, i) -> i + dt * v) >>>
                  init 0 >>> arr dup)
 
 sr = 44100 :: Int
-dt = 1 / (fromIntegral sr)
+dt = 1 / (fromIntegral sr) :: Double
 
 inp :: [()]
 inp = () : inp
@@ -84,7 +85,10 @@ exp_normalized_b elem = nth elem (observeB exp)
 
 exp_normalized_d elem = nth elem (observeD exp)
 
-exp_normalized_direct_apply elem = nthCCNF_D elem exp
+exp' :: CCNF_D () Double
+exp' = exp
+
+exp_normalized_direct_apply elem = nthCCNF_D elem exp'
 
 exp_normalized_th_nth elem = nth' elem $(normOpt S.exp)
 
