@@ -10,7 +10,6 @@ import Data.Array.Base (unsafeAt)
 import Data.Array.Unboxed
 import GHC.IO
 import System.Environment
-import System.Random
 import Foreign.Marshal
 import Foreign.Ptr
 import Foreign.Storable
@@ -72,10 +71,10 @@ main = do
   case arg of
     [ opt, name ] -> 
       case lookup opt playlist >>= lookup name of
-        Just (dur, stream) -> outFile name dur stream
+        Just (dur, stream) -> outFile (name ++ ".wav") dur stream
         _ -> usage
     [ name ] -> case lookup "template" playlist >>= lookup name of
-        Just (dur, stream) -> outFile name dur stream
+        Just (dur, stream) -> outFile (name ++ ".wav") dur stream
         _ -> usage
     _ -> usage
   where
