@@ -10,7 +10,7 @@ import Language.Haskell.TH
 {-# LINE 6 "Sound.as" #-}
 import SoundAux
 {-# LINE 7 "Sound.as" #-}
-import System.Random
+import System.Random.Mersenne.Pure64
 {-# LINE 8 "Sound.as" #-}
 import System.IO.Unsafe
 {-# LINE 9 "Sound.as" #-}
@@ -111,22 +111,22 @@ noiseWhite :: (ArrowInit a) => Int -> a () Double
 {-# LINE 58 "Sound.as" #-}
 noiseWhite seed
   = let {-# LINE 59 "Sound.as" #-}
-        gen = mkStdGen seed
+        gen = pureMT $ fromIntegral seed
       in
       (loop
          (arr'
             [|
               (\ ((), g) ->
                  let {-# LINE 62 "Sound.as" #-}
-                     (a, g') = random g :: (Double, StdGen)
+                     (a, g') = randomDouble g 
                    in (g', a))
               |]
             (\ ((), g) ->
                let {-# LINE 62 "Sound.as" #-}
-                   (a, g') = random g :: (Double, StdGen)
+                   (a, g') = randomDouble g 
                  in (g', a))
             >>>
-            (first (init' [| let gen = mkStdGen seed in gen |] gen) >>>
+            (first (init' [| let gen = pureMT (fromIntegral seed) in gen |] gen) >>>
                arr' [| (\ (g, a) -> (a, g)) |] (\ (g, a) -> (a, g))))
          >>> arr' [| (\ a -> a * 2 - 1) |] (\ a -> a * 2 - 1))
  

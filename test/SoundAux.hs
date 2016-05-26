@@ -7,7 +7,6 @@ import Data.Array.Base (unsafeAt)
 import Data.Array.Unboxed
 import GHC.IO
 import System.Environment
-import System.Random
 import Foreign.Marshal
 import Foreign.Ptr
 import Foreign.Storable

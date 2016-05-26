@@ -6,7 +6,8 @@ import Control.Category
 import Control.Arrow
 import Control.CCA.Types
 import Control.CCA.Instances
-import System.Random
+--import System.Random
+import System.Random.Mersenne.Pure64
 import System.IO.Unsafe
 import Data.Array.Base (unsafeAt)
 import Data.Array.Unboxed
@@ -67,10 +68,10 @@ envLineSeg amps durs =
 
 noiseWhite :: forall a p . (ArrowInit a, Clock p) => Int -> SigFun a p () Double
 noiseWhite seed =
-    let gen = mkStdGen seed
+    let gen = pureMT $ fromIntegral seed 
     in proc () -> do
       rec
-        let (a,g') = random g :: (Double,StdGen)
+        let (a,g') = randomDouble g 
         g <- init gen -< g'
       outA -< a * 2 - 1
 
