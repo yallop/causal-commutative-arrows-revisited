@@ -14,29 +14,30 @@ import System.Random.Mersenne.Pure64
 {-# LINE 8 "Sound.as" #-}
 import System.IO.Unsafe
 {-# LINE 9 "Sound.as" #-}
-import Data.Array.Unboxed
- 
+import qualified Data.Vector.Unboxed as V
+import Instances.TH.Lift
+  
 {-# LINE 11 "Sound.as" #-}
 seghlp ::
        (ArrowInit a) =>
          [Double] -> [Double] -> a () (Double, Double, Double, Double)
 {-# LINE 16 "Sound.as" #-}
 seghlp iamps idurs
+{-
   = let {-# LINE 17 "Sound.as" #-}
         sr = rate (undefined)
         {-# LINE 18 "Sound.as" #-}
-        sz = length iamps
+        sz = V.length amps
         {-# LINE 19 "Sound.as" #-}
-        amps = Tab iamps sz (listArray (0, sz - 1) iamps)
+        amps = mkTab iamps 
         {-# LINE 20 "Sound.as" #-}
-        durs = Tab idurs (sz - 1) (listArray (0, sz - 2) (map (* sr) idurs))
+        durs = mkTab $ map (* sr) idurs
       in
       (loop
          (((arr'
               [|
                 (\ (_, ~(i, t)) ->
                    let {-# LINE 23 "Sound.as" #-}
-                       durs = Tab idurs (sz - 1) (listArray (0, sz - 2) (map (* sr) idurs))
                        (t', i')
                          = if t >= durs `aAt` i then
                              if i == sz - 2 then (t + 1, i) else (0, i + 1) else (t + 1, i)
@@ -59,13 +60,11 @@ seghlp iamps idurs
            [|
              (\ (i, t) ->
                 let {-# LINE 28 "Sound.as" #-}
-                    amps = Tab iamps sz (listArray (0, sz - 1) iamps)
                     a1 = aAt amps i
                     {-# LINE 29 "Sound.as" #-}
                     a2 = aAt amps (i + 1)
                     {-# LINE 30 "Sound.as" #-}
                     d = aAt durs i
-                    durs = Tab idurs (sz - 1) (listArray (0, sz - 2) (map (* sr) idurs))
                   in (a1, a2, t, d))
              |]
            (\ (i, t) ->
@@ -76,24 +75,47 @@ seghlp iamps idurs
                   {-# LINE 30 "Sound.as" #-}
                   d = aAt durs i
                 in (a1, a2, t, d)))
- 
+-}
+   = loop (arr' [| (\((), ~(i, t)) ->
+            let amps = mkTab iamps
+                durs = mkTab $ map (*sr) idurs
+                (t', i') = if t >= durs `aAt` i
+                         then if i == sz-2 then (t+1, i) else (0, i+1)
+                           else (t+1, i)
+                a1 = aAt amps i
+                a2 = aAt amps (i+1)
+                d  = aAt durs i
+            in ((i', t'), (a1,a2,t,d))) |]
+           (\((), ~(i, t)) ->
+            let amps = mkTab iamps
+                durs = mkTab $ map (*sr) idurs
+                (t', i') = if t >= durs `aAt` i
+                         then if i == sz-2 then (t+1, i) else (0, i+1)
+                           else (t+1, i)
+                a1 = aAt amps i
+                a2 = aAt amps (i+1)
+                d  = aAt durs i
+            in ((i', t'), (a1,a2,t,d))) 
+        >>> first (init' [| (0, 0) |] (0, 0))
+        >>> arr' [| \(x, y) -> (y, x) |] (\(x,y)->(y,x)))
+    where
+      sr = rate (undefined) :: Double
+      sz = length iamps :: Int
+
+
 {-# LINE 34 "Sound.as" #-}
 envLine ::
         (ArrowInit a) => Double -> Double -> Double -> a () Double
 {-# LINE 39 "Sound.as" #-}
 envLine a dur b
   = let {-# LINE 40 "Sound.as" #-}
-        sr = rate undefined 
-        srV = varE $ mkName "sr"
-        aV = varE $ mkName "a"
-        bV = varE $ mkName "b"
-        durV = varE $ mkName "dur"
+        sr = rate (undefined)
       in
       (loop
-         (arr' [| (\ ((), y) -> y + ($(bV) - $(aV)) * (1 / $(srV) / $(durV))) |]
+         (arr' [| (\ ((), y) -> y + (b - a) * (1 / sr / dur)) |]
             (\ ((), y) -> y + (b - a) * (1 / sr / dur))
             >>>
-            (init' [| $(aV) |] a >>> arr' [| (\ y -> (y, y)) |] (\ y -> (y, y)))))
+            (init' [| a |] a >>> arr' [| (\ y -> (y, y)) |] (\ y -> (y, y)))))
  
 {-# LINE 46 "Sound.as" #-}
 envLineSeg :: (ArrowInit a) => [Double] -> [Double] -> a () Double
@@ -126,7 +148,7 @@ noiseWhite seed
                    (a, g') = randomDouble g 
                  in (g', a))
             >>>
-            (first (init' [| let gen = pureMT (fromIntegral seed) in gen |] gen) >>>
+            (first (init' [| pureMT (fromIntegral seed) |] gen) >>>
                arr' [| (\ (g, a) -> (a, g)) |] (\ (g, a) -> (a, g))))
          >>> arr' [| (\ a -> a * 2 - 1) |] (\ a -> a * 2 - 1))
  
@@ -139,7 +161,7 @@ delayLine maxdel
         {-# LINE 70 "Sound.as" #-}
         sz = truncate (sr * maxdel)
         {-# LINE 71 "Sound.as" #-}
-        buf = mkArr sz
+        buf = mkBuf sz
       in
       (loop
          (((arr'
@@ -159,7 +181,7 @@ delayLine maxdel
             (first (init' [| 0 |] 0) >>>
                arr' [| (\ (y, i) -> ((i, y), i)) |] (\ (y, i) -> ((i, y), i))))
          >>>
-         arr' [| let buf = mkArr sz in (\ (i, y) -> unsafePerformIO $ updateBuf buf i y) |]
+         arr' [| let buf = mkBuf sz in (\ (i, y) -> unsafePerformIO $ updateBuf buf i y) |]
            (\ (i, y) -> unsafePerformIO $ updateBuf buf i y))
  
 {-# LINE 79 "Sound.as" #-}
@@ -206,8 +228,10 @@ filterLowPassBW
 readFromSineTableA :: (ArrowInit a) => a Double Double
 {-# LINE 94 "Sound.as" #-}
 readFromSineTableA 
-  = (arr' [| (\ x -> readFromTable sineTable x) |]
-       (\ x -> readFromTable sineTable x))
+  = arr' [| readFromSineTable |] readFromSineTable
+
+readFromSineTable = readFromTable sineTable
+{-# NOINLINE readFromSineTable #-}
  
 {-# LINE 97 "Sound.as" #-}
 oscSine :: (ArrowInit a) => Double -> a Double Double

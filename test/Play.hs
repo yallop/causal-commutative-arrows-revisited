@@ -6,6 +6,7 @@ import Control.CCA.CCNF
 import Control.CCA.Types
 import Control.CCA.Instances
 import SoundAux
+import SoundFun
 import Data.Array.Base (unsafeAt)
 import Data.Array.Unboxed
 import GHC.IO
@@ -17,7 +18,6 @@ import Codec.Wav
 import Data.Audio
 import Data.Int
 import Data.List
-import SoundFun
 import qualified SoundTH
 import qualified Sound
 
@@ -96,15 +96,15 @@ fluteTH = $(normOpt SoundTH.fluteA)
 shepardTH = $(normOpt SoundTH.shepardA) 
 
 fluteNF :: CCNF_D () Double
-fluteNF = strip $ Sound.flute 5 0.3 440 0.99 0.2 
+fluteNF = Sound.flute 5 0.3 440 0.99 0.2 
 
 shepardNF :: CCNF_D () Double
-shepardNF = strip $ Sound.shepard 16.0 
+shepardNF = Sound.shepard 16.0 
 
 fluteSF :: SF () Double
-fluteSF = strip $ Sound.flute 5 0.3 440 0.99 0.2 
+fluteSF = Sound.flute 5 0.3 440 0.99 0.2 
 
 shepardSF :: SF () Double
-shepardSF = strip $ Sound.shepard 16.0 
+shepardSF = Sound.shepard 16.0 
 
 

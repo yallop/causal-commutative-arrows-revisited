@@ -1,20 +1,15 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, EmptyDataDecls, FlexibleInstances, FlexibleContexts, BangPatterns, ExistentialQuantification, ScopedTypeVariables, Arrows #-}
+{-# LANGUAGE BangPatterns #-}
 module SoundAux where
 
-import Control.Arrow
-import Prelude hiding (init,id)
-import Data.Array.Base (unsafeAt)
-import Data.Array.Unboxed
-import GHC.IO
-import System.Environment
 import Foreign.Marshal
 import Foreign.Ptr
 import Foreign.Storable
-import Codec.Wav
-import Data.Audio
-import Data.Int
+import System.IO.Unsafe
+import qualified Data.Vector.Unboxed as V
 
-data Tab = Tab [Double] !Int !(UArray Int Double)
+audioRate = 44100 :: Double
+
+type Tab = V.Vector Double
 
 type Time            = Double
 type TableSize       = Int
@@ -34,10 +29,8 @@ updateBuf (Buf _ a) i u = a `seq` i `seq` u `seq` do
     poke p u
     return x'
 
-peekBuf (Buf sz a) i = peek (a `advancePtr` (min (sz-1) i))
-
-mkArr :: Int -> Buf
-mkArr n = n `seq` Buf n (unsafePerformIO $
+mkBuf :: Int -> Buf
+mkBuf n = n `seq` Buf n (unsafePerformIO $
             Foreign.Marshal.newArray (replicate n 0))
 
 sqrt2 :: Double
@@ -47,24 +40,17 @@ frac :: RealFrac r => r -> r
 frac = snd . properFraction
 
 aAt :: Tab -> Int -> Double
-aAt (Tab _ sz a) i = unsafeAt a (min (sz-1) i)
+aAt arr i = V.unsafeIndex arr $ min (V.length arr - 1) i
 
-data Table = Table
-    !Int                   -- size
-    !(UArray Int Double)   -- table implementation
-    !Bool                  -- Whether the table is normalized
+mkTab :: [Double] -> Tab
+mkTab = V.fromList
 
-instance Show Table where
-    show (Table sz a n) = "Table with " ++ show sz ++ " entries: " ++ show a
+type Table = V.Vector Double
 
 funToTable :: (Double->Double) -> Bool -> Int -> Table
 funToTable f normalize size =
-    let delta = 1 / fromIntegral size
-        ys = take size (map f [0, delta.. ]) ++ [head ys]
-             -- make table one size larger as an extended guard point
-        zs = if normalize then map (/ maxabs ys) ys else ys
-        maxabs = maximum . map abs
-    in Table size (listArray (0, size) zs) normalize
+    let arr = V.generate size (\i -> f $ fromIntegral i / fromIntegral size)
+    in if normalize then V.map (/ (V.maximum $ V.map abs arr)) arr else arr
 
 tableSinesF :: (Floating a, Enum a) => [a] -> a -> a
 tableSinesF pss x = let phase = 2 * pi * x
@@ -83,9 +69,10 @@ sineTable = tableSinesN 4096 [1]
 data ButterData = ButterData !Double !Double !Double !Double !Double
 
 readFromTable :: Table -> Double -> Double
-readFromTable (Table sz array _) pos =
-    let idx = truncate (fromIntegral sz * pos)  -- range must be [0,size]
-    in array `unsafeAt` idx
+readFromTable arr pos =
+    let size = V.length arr
+        idx  = truncate (fromIntegral size * pos)  -- range must be [0,size]
+    in if idx < 0 then error (show (pos, size, idx)) else (V.!) arr idx
 {-# INLINE [0] readFromTable #-}
 
 blpset :: Double -> Double -> ButterData
