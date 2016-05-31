@@ -430,7 +430,7 @@ main = do
   timeIt "sintP" $ print (nth n sineP_t)
   timeIt "flute" $ print (nth (5 * floor audioRate) fluteA)
   outFile "flute.wav" 5 (unfoldNF fluteA)
-  timeIt "shepard" $ print (nth (16 * floor audioRate) shepardA)
+  timeIt "shepard" $ print (nth (5 * floor audioRate) shepardA)
   outFile "shepard.wav" 5 (unfoldNF shepardA)
 
 timeIt s m = do
