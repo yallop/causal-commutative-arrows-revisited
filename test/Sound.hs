@@ -165,11 +165,20 @@ flute dur amp fqc press breath =
 {-# SPECIALIZE INLINE flute :: Time -> Double -> Double -> Double -> Double -> SF () Double #-}
 
 shepard :: ArrowInit a => Time -> a () Double 
+{-
 shepard seconds = if seconds <= 0.0 then arr (const 0.0) else proc _ -> do
     f <- envLineSeg [800,100,100] [4.0, seconds] -< () -- frequency
     e <- envLineSeg [0, 1, 0, 0] [2.0, 2.0, seconds] -< () -- volume envelope
     s <- osc sineTable 0 -< f -- descending sine wave tone
     sRest <- delayLine 0.5 <<< shepard (seconds-0.5) -< () -- delayed other tones
     returnA -< (e * s * 0.1) + sRest
+-}
+shepard seconds = if seconds <= 0.0 then arr (const 0.0) else (
+    arr (\x -> (x, (x, x))) >>> 
+    ((shepard (seconds - 0.5) >>> delayLine 0.5) ***
+    ((envLineSeg [800,100,100] [4.0, seconds] >>> osc sineTable 0) ***
+     (envLineSeg [0, 1, 0, 0] [2.0, 2.0, seconds]))) >>>
+    arr (\(x, (s, e)) -> e * s * 0.1 + x))
+
 {-# SPECIALIZE INLINE shepard :: Time -> CCNF_D () Double #-}
 {-# SPECIALIZE INLINE shepard :: Time -> SF () Double #-}
