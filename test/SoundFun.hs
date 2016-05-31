@@ -58,6 +58,7 @@ instance Arrow SF where
     where
       g f (x, z) = ((y, z), SF (g f'))
         where (y, f') = runSF f x
+{-
   second f = SF (g f)
     where
       g f (z, x) = ((z, y), SF (g f'))
@@ -74,6 +75,7 @@ instance Arrow SF where
         let (y, f') = runSF f (fst x)
             (z, g') = runSF g (snd x) 
         in ((y, z), SF (h f' g'))
+-}
 
 instance ArrowLoop SF where
   loop sf = SF (g sf)
