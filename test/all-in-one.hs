@@ -151,17 +151,20 @@ nth n (LoopD i f) = aux n i
   where
     aux n i = x `seq` if n == 0 then x else aux (n-1) i'
       where (x, i') = f ((), i)
+{-# INLINE nth #-}
 
 unfoldTH :: (b, ((), b) -> (a, b)) -> [a]
 unfoldTH (i, f) = next i
   where
     next i = let (x, i') = f ((), i)
              in x : next i'
+{-# INLINE unfoldTH #-}
 
 unfoldNF :: CCNF () a -> [a]
 unfoldNF (Arr f) = map f inp
   where inp = () : inp
 unfoldNF (LoopD i f) = unfoldTH (i, f)
+{-# INLINE unfoldNF #-}
 
 n = 1000000
 -- sine_t = sine 47
@@ -300,6 +303,7 @@ envLine a dur b =
       rec
         y <- init  a -< y + (b-a) * (1 / sr / dur)
       outA -< y
+{-# SPECIALIZE INLINE envLine :: Double -> Double -> Double -> CCNF () Double #-}
 
 
 envLineSeg :: ArrowInit a =>
@@ -322,6 +326,7 @@ noiseWhite seed =
         let (a,g') = randomDouble g 
         g <- init gen -< g'
       outA -< a * 2 - 1
+{-# SPECIALIZE INLINE noiseWhite :: Int -> CCNF () Double #-}
 
 
 delayLine :: ArrowInit a =>
@@ -336,6 +341,7 @@ delayLine maxdel =
           i <- init 0 -< i'
           y <- init 0 -< x
         outA -< unsafePerformIO $ updateBuf buf i y
+{-# SPECIALIZE INLINE delayLine :: Double -> CCNF Double Double #-}
 
 
 butter :: ArrowInit a => a (Double,ButterData) Double
@@ -345,6 +351,7 @@ butter = proc (sig, ButterData a1 a2 a3 a4 a5) -> do
         y'  <- init 0 -< t
         y'' <- init 0 -< y'
     outA -< y
+{-# SPECIALIZE INLINE butter :: CCNF (Double, ButterData) Double #-}
 
 
 filterLowPassBW :: ArrowInit a => a (Double, Double) Double
@@ -352,6 +359,7 @@ filterLowPassBW =
   let sr = audioRate 
   in proc (sig, freq) -> do
        butter -< (sig, blpset freq sr)
+{-# SPECIALIZE INLINE filterLowPassBW :: CCNF (Double, Double) Double #-}
 
 
 osc :: ArrowInit a =>
@@ -360,10 +368,12 @@ osc :: ArrowInit a =>
                  -- fraction of a cycle (0 to 1).
       -> a Double Double
 osc table iphs = osc_ iphs >>> readFromTableA table
+{-# SPECIALIZE INLINE osc :: Table -> Double -> CCNF Double Double #-}
 
 
 readFromTableA :: Arrow a => Table -> a Double Double
 readFromTableA = arr . readFromTable
+{-# SPECIALIZE INLINE readFromTableA :: Table -> CCNF Double Double #-}
 
 
 osc_ :: ArrowInit a =>
@@ -376,6 +386,7 @@ osc_ phs =
             phase = if next > 1 then frac next else next
         next <- init phs -< frac (phase + delta)
       outA -< phase
+{-# SPECIALIZE INLINE osc_ :: Double -> CCNF Double Double #-}
 
 flute :: ArrowInit a => Time -> Double -> Double -> Double -> Double -> a () Double 
 flute dur amp fqc press breath = 
@@ -393,6 +404,7 @@ flute dur amp fqc press breath =
          x      <- delayLine (1/fqc/2)  -< emb + flute*0.4
          out    <- filterLowPassBW -< (x-x*x*x + flute*0.4, 2000)
     outA -< out*amp*env2
+{-# SPECIALIZE INLINE flute :: Time -> Double -> Double -> Double -> Double -> CCNF () Double #-}
 
 shepard :: ArrowInit a => Time -> a () Double 
 shepard seconds = if seconds <= 0.0 then arr (const 0.0) else proc _ -> do
@@ -401,11 +413,15 @@ shepard seconds = if seconds <= 0.0 then arr (const 0.0) else proc _ -> do
     s <- osc sineTable 0 -< f -- descending sine wave tone
     sRest <- delayLine 0.5 <<< shepard (seconds-0.5) -< () -- delayed other tones
     returnA -< (e * s * 0.1) + sRest
+{-# SPECIALIZE INLINE shepard :: Time -> CCNF () Double #-}
 
 
 fluteA, shepardA :: CCNF () Double
 fluteA = flute 5 0.3 440 0.99 0.2
 shepardA = shepard 5.0
+{-# INLINE fluteA #-}
+{-# INLINE shepardA #-}
+
 {-
 main = defaultMain 
   [ bgroup "ccnf" [ bench "flute"   $ nf (flip nth fluteA)          (5 * floor audioRate)
@@ -429,9 +445,10 @@ main = do
   timeIt "sine"  $ print (nth n sine_t) 
   timeIt "sintP" $ print (nth n sineP_t)
   timeIt "flute" $ print (nth (5 * floor audioRate) fluteA)
-  outFile "flute.wav" 5 (unfoldNF fluteA)
   timeIt "shepard" $ print (nth (5 * floor audioRate) shepardA)
-  outFile "shepard.wav" 5 (unfoldNF shepardA)
+  timeIt "flute.wav" $ outFile "flute.wav" 5 (unfoldNF fluteA)
+  timeIt "shepard.wav" $ outFile "shepard.wav" 5 (unfoldNF shepardA)
+
 
 timeIt s m = do
   t0 <- getCurrentTime
