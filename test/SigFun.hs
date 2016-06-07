@@ -27,7 +27,10 @@ instance Arrow SF where
     where
       g f (x, z) = ((y, z), SF (g f'))
         where (y, f') = runSF f x
-{-
+  second f = arr swap >>> first f >>> arr swap
+  f *** g = first f >>> second g
+  f &&& g = arr (\x -> (x, x)) >>> f *** g
+ {-
   second f = SF (g f)
     where
       g f (z, x) = ((z, y), SF (g f'))

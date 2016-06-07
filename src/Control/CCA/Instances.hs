@@ -233,6 +233,7 @@ instance Arrow (CCNF_ST s) where
    first (LoopST i f) = LoopST i aux
      where
        aux i ~(x, y) = (,y) <$> f i x
+{-
    second (ArrST f) = ArrST (second f)
    second (LoopST i f) = LoopST i aux
      where
@@ -275,9 +276,10 @@ instance Arrow (CCNF_ST s) where
         u <- f i x
         v <- g j x 
         return (u, v)
---   second f = arr swap >>> first f >>> arr swap
---   f *** g = first f >>> second g
---   f &&& g = arr (\x -> (x, x)) >>> f *** g
+-}
+   second f = arr swap >>> first f >>> arr swap
+   f *** g = first f >>> second g
+   f &&& g = arr (\x -> (x, x)) >>> f *** g
    
 
  
