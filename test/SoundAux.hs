@@ -84,5 +84,3 @@ blpset freq sr = ButterData a1 a2 a3 a4 a5
         a3 = a1
         a4 = 2 * (1 - csq) * a1
         a5 = (1 - sqrt2 * c + csq) * a1
-
-

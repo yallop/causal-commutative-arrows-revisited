@@ -1,11 +1,18 @@
-{-# LANGUAGE GADTs, TypeOperators, KindSignatures #-}
+{-# LANGUAGE TupleSections, RecursiveDo, GADTs, TypeOperators, KindSignatures #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 
 module Control.CCA.Instances where
 
 import Control.Category
+import Control.Applicative ((<*>), (<$>))
 import Control.Arrow
 import Control.CCA.Types 
+import Control.Monad.ST
+import Control.Monad.ST.Unsafe as STU
+import Data.IORef
+import Data.STRef
+import System.IO.Unsafe
+import qualified Data.Vector.Unboxed.Mutable as MV
 
 import Prelude hiding ((.), init, id)
 
@@ -47,6 +54,9 @@ instance ArrowLoop CCNF_B where
                                in (a', ((b', d'), (c, e')))))
                       ((), i)
 
+instance ArrowInit CCNF_B where
+   init = \i -> LoopB ((\ ~(b,(a,c)) -> (c,(a,b)))) i
+
 -- evaluate a term in CCNF_B normal form at an ArrowInit instance
 observeB :: (ArrowInit arr) => CCNF_B a b -> (a `arr` b)
 observeB (ArrB f) = arr f
@@ -73,13 +83,11 @@ applyCCNF_D (LoopD i f) = runCCNF i f
      where g i (x:xs) = let (y, i') = f (x, i)
                         in y : g i' xs
 
-
 -- CCNF_D is an instance of ArrowInit (and hence of the superclasses
 -- ArrowLoop, Arrow and Category)
 -- (adapted from Paul Liu's dissertation)
 instance Category CCNF_D where
    id = ArrD id
-   
 
    ArrD g    . ArrD f    = ArrD (g . f)
    LoopD i g . ArrD f    = LoopD i (g . first f)
@@ -104,9 +112,6 @@ instance ArrowLoop CCNF_D where
    loop (ArrD f ) = ArrD (trace f)
    loop (LoopD i f) = LoopD i (trace (juggle' f))
    
-
-instance ArrowInit CCNF_B where
-   init = \i -> LoopB ((\ ~(b,(a,c)) -> (c,(a,b)))) i
 
 instance ArrowInit CCNF_D where
    init i = LoopD i swap
@@ -146,3 +151,185 @@ juggle':: (((a, c), b) -> ((d, e), f)) ->
           (((a, b), c) -> ((d, f), e))
 juggle' f = juggle . f . juggle
 {-# INLINE juggle' #-}
+
+-- loopD-based CCA normal form, with transition function uncurried
+
+data CCNF_D' :: * -> * -> * where
+   ArrD'   :: (a -> b) -> CCNF_D' a b
+   LoopD' :: e -> ((b,e) -> (c,e)) -> CCNF_D' b c
+
+-- evaluate a term in CCNF_D' normal form at an ArrowInit instance
+observeD' :: ArrowInit arr => CCNF_D' a b -> (a `arr` b)
+observeD' (ArrD' f) = arr f
+observeD' (LoopD' i f) = loop (arr f >>> second (init i))
+
+-- apply a normalized (CCNF_D') computation to transform a stream
+applyCCNF_D' :: CCNF_D' a b -> [a] -> [b]
+applyCCNF_D' (ArrD' f) = map f
+applyCCNF_D' (LoopD' i f) = runCCNF i f
+  where
+   -- from Section 6 of the ICFP paper
+   runCCNF :: e -> ((b,e) -> (c,e)) -> [b] -> [c]
+   runCCNF i f = g i
+     where g i (x:xs) = let (y, i') = f (x, i)
+                        in y : g i' xs
+
+-- CCNF_D' is an instance of ArrowInit (and hence of the superclasses
+-- ArrowLoop, Arrow and Category)
+-- (adapted from Paul Liu's dissertation)
+instance Category CCNF_D' where
+   id = ArrD' id
+
+   ArrD' g    . ArrD' f    = ArrD' (g . f)
+   LoopD' i g . ArrD' f    = LoopD' i (g . first f)
+   ArrD' g    . LoopD' i f = LoopD' i (first g . f)
+   LoopD' j g . LoopD' i f = LoopD' (i, j) (assoc' (juggle' (first g) . first f))
+   
+
+instance Arrow CCNF_D' where
+   arr = ArrD'
+   
+   first (ArrD' f) = ArrD' (first f)
+   first (LoopD' i f) = LoopD' i (juggle' (first f))
+   
+   second f = arr swap >>> first f >>> arr swap
+   
+   f *** g = first f >>> second g
+   
+   f &&& g = arr (\x -> (x, x)) >>> f *** g
+   
+
+instance ArrowLoop CCNF_D' where
+   loop (ArrD' f ) = ArrD' (trace f)
+   loop (LoopD' i f) = LoopD' i (trace (juggle' f))
+   
+
+instance ArrowInit CCNF_D' where
+   init i = LoopD' i swap
+ 
+-- ST Monad based CCNF
+
+data CCNF_ST s a b where
+   ArrST   :: (a -> b) -> CCNF_ST s a b
+   LoopST :: ST s e -> (e -> b -> ST s c) -> CCNF_ST s b c
+
+instance Category (CCNF_ST s) where
+   id = ArrST id
+   ArrST g    . ArrST f      = ArrST (g . f)
+   LoopST i g . ArrST f     = LoopST i (\i -> g i . f)
+   ArrST g    . LoopST i f  = LoopST i (\i -> fmap g . f i)
+   LoopST j g . LoopST i f = LoopST ((,) <$> i <*> j) h
+    where
+      h (i, j) x = do
+        y <- f i x
+        z <- g j y
+        return z
+
+instance Arrow (CCNF_ST s) where
+   arr = ArrST
+   first (ArrST f)     = ArrST (first f)
+   first (LoopST i f) = LoopST i aux
+     where
+       aux i ~(x, y) = (,y) <$> f i x
+   second (ArrST f) = ArrST (second f)
+   second (LoopST i f) = LoopST i aux
+     where
+       aux i ~(x, y) = (x,) <$> f i y
+   ArrST f *** ArrST g = ArrST (f *** g)
+   ArrST f *** LoopST j g = LoopST j aux
+     where
+       aux j ~(x, y) = do
+        let u = f x
+        v <- g j y
+        return (u, v)
+   LoopST i f *** ArrST g = LoopST i aux
+     where
+       aux i ~(x, y) = do
+        u <- f i x
+        let v = g y
+        return (u, v)
+   LoopST i f *** LoopST j g = LoopST ((,) <$> i <*> j) aux
+     where
+       aux ~(i, j) ~(x, y) = do
+        u <- f i x
+        v <- g j y
+        return (u, v)
+   ArrST f &&& ArrST g = ArrST (f &&& g)
+   ArrST f &&& LoopST j g = LoopST j aux
+     where
+       aux j x = do
+        let u = f x
+        v <- g j x 
+        return (u, v)
+   LoopST i f &&& ArrST g = LoopST i aux
+     where
+       aux i x = do
+        u <- f i x
+        let v = g x 
+        return (u, v)
+   LoopST i f &&& LoopST j g = LoopST ((,) <$> i <*> j) aux
+     where
+       aux (i, j) x = do
+        u <- f i x
+        v <- g j x 
+        return (u, v)
+--   second f = arr swap >>> first f >>> arr swap
+--   f *** g = first f >>> second g
+--   f &&& g = arr (\x -> (x, x)) >>> f *** g
+   
+
+ 
+instance ArrowLoop (CCNF_ST s) where
+   loop (ArrST f )   = ArrST (trace f)
+   loop (LoopST i f) = LoopST i h
+     where
+       -- f :: ((a, c), e) -> ST s (b, c)
+       -- h :: (a, e) -> ST s b
+       h i x = do
+         rec (y, j) <- f i (x, j)
+         return y
+
+instance ArrowInit (CCNF_ST s) where
+   init i = LoopST (newSTRef i) f
+     where
+       f i x = do
+         y <- readSTRef i
+         writeSTRef i x
+         return y
+
+class ArrowInit a => ArrowInitLine a where
+   initLine :: MV.Unbox b => Int -> b -> a b b
+
+instance ArrowInitLine (CCNF_ST s) where
+   initLine size i = LoopST newBuf f
+     where
+       newBuf = do
+         b <- MV.new size
+         MV.set b i 
+         r <- newSTRef 0
+         return (b, r)
+       f (b, r) x = do
+         i <- readSTRef r
+         x' <- MV.unsafeRead b i
+         MV.unsafeWrite b i x
+         let i' = i + 1 
+         writeSTRef r $ if i' >= size then 0 else i'
+         return x'
+
+instance ArrowInitLine CCNF_D where
+   initLine size i = LoopD newBuf f
+     where
+       newBuf = unsafePerformIO $ do
+         b <- MV.new size 
+         MV.set b i
+         r <- newIORef 0
+         return (b, r)
+       f (x, s@(b, r)) = unsafePerformIO $ do
+         i <- readIORef r
+         x' <- MV.unsafeRead b i
+         MV.unsafeWrite b i x
+         let i' = i + 1 
+         writeIORef r $ if i' >= size then 0 else i'
+         return (x', s)
+
+

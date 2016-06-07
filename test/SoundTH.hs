@@ -7,6 +7,7 @@ import Control.CCA
 import Prelude hiding (init)
 {-# LINE 5 "Sound.as" #-}
 import Language.Haskell.TH
+import Language.Haskell.TH.Syntax
 {-# LINE 6 "Sound.as" #-}
 import SoundAux
 {-# LINE 7 "Sound.as" #-}
@@ -15,8 +16,10 @@ import System.Random.Mersenne.Pure64
 import System.IO.Unsafe
 {-# LINE 9 "Sound.as" #-}
 import qualified Data.Vector.Unboxed as V
-import Instances.TH.Lift
-  
+
+instance (V.Unbox a, Lift a) => Lift (V.Vector a) where
+  lift v = [| V.fromList $(lift $ V.toList v) |]
+ 
 {-# LINE 11 "Sound.as" #-}
 seghlp ::
        (ArrowInit a) =>

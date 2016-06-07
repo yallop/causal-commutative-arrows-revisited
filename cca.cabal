@@ -6,19 +6,19 @@ Cabal-version:  >= 1.8
 Author:         Jeremy Yallop <yallop@gmail.com>
 
 library
-  build-depends:   CCA, base, hermit, kure, transformers, ghc, ghc-prim, containers
+  build-depends:   CCA, base, hermit, kure, transformers, ghc, ghc-prim, containers, vector
   exposed-modules: Control.CCA.Instances, Reduction
-  ghc-options:     -O2 -funfolding-use-threshold=512
+  ghc-options:     -O2 -funfolding-use-threshold=512 
   Hs-Source-Dirs:  src
 
 Executable play
-  build-depends:  cca, base, CCA, template-haskell, HCodecs, array, mersenne-random-pure64, th-lift-instances, vector
+  build-depends:  cca, base, CCA, template-haskell, HCodecs, array, mersenne-random-pure64, vector
   Main-is:        Play.hs
   ghc-options:    -O2 -funfolding-use-threshold=512 
   Hs-Source-Dirs: test
 
 Executable test
-  build-depends:  criterion, cca, base, CCA, template-haskell
+  build-depends:  criterion, cca, base, CCA, template-haskell, mersenne-random-pure64, vector
   Main-is:        Main.hs
-  ghc-options:    -O2 -funfolding-use-threshold=512 -fno-full-laziness
+  ghc-options:    -O2 -funfolding-use-threshold=512 
   Hs-Source-Dirs: test

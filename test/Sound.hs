@@ -10,7 +10,7 @@ import Control.CCA.Instances
 import System.Random.Mersenne.Pure64
 import System.IO.Unsafe
 import SoundAux
-import SoundFun
+import SigFun
 import qualified Data.Vector.Unboxed as V
 
 outA :: Arrow a => a b b
@@ -22,13 +22,11 @@ seghlp :: ArrowInit a =>
                      -- Needs to be one element fewer than 'iamps'.
         -> a () (Double,Double,Double,Double)
 seghlp iamps idurs =
-{-
     let sr = audioRate 
         sz = V.length amps
         amps = mkTab iamps
         durs = mkTab $ map (*sr) idurs
     in proc _ -> do
-      -- TODO: this is better defined using 'integral', but which is faster?
       rec
         let (t', i') = if t >= durs `aAt` i
                          then if i == sz-2 then (t+1, i) else (0, i+1)
@@ -39,23 +37,18 @@ seghlp iamps idurs =
           a2 = aAt amps (i+1)
           d  = aAt durs i
       outA -< (a1,a2,t,d)
--}
-    loop (arr (\((), (i, t)) ->
-            let amps = mkTab iamps
-                durs = mkTab $ map (*sr) idurs
-                (t', i') = if t >= durs `aAt` i
+{-
+    in loop (arr (\((), (i, t)) ->
+            let (t', i') = if t >= durs `aAt` i
                          then if i == sz-2 then (t+1, i) else (0, i+1)
                            else (t+1, i)
                 a1 = aAt amps i
                 a2 = aAt amps (i+1)
                 d  = aAt durs i
-            in ((a1,a2,t,d), (i', t'))) >>> second (init (0, 0)))
-    where
-      sr = audioRate 
-      sz = length iamps
-
-            
-        
+            in ((a1,a2,t,d), (i', t'))) >>> second (init 0 *** init 0))
+-}
+{-# SPECIALIZE INLINE seghlp :: [Double] -> [Double] -> CCNF_ST s () (Double, Double, Double, Double) #-}
+{-# SPECIALIZE INLINE seghlp :: [Double] -> [Double] -> CCNF_D () (Double, Double, Double, Double) #-}
 
 envLine :: ArrowInit a =>
         Double  -- Starting value.
@@ -68,6 +61,8 @@ envLine a dur b =
       rec
         y <- init  a -< y + (b-a) * (1 / sr / dur)
       outA -< y
+{-# SPECIALIZE INLINE envLine :: Double -> Double -> Double -> CCNF_ST s () Double #-}
+{-# SPECIALIZE INLINE envLine :: Double -> Double -> Double -> CCNF_D () Double #-}
 
 
 envLineSeg :: ArrowInit a =>
@@ -80,7 +75,8 @@ envLineSeg amps durs =
     in proc () -> do
       (a1,a2,t,d) <- sf -< ()
       outA -< a1 + (a2-a1) * (t / d)
-
+{-# SPECIALIZE INLINE envLineSeg :: [Double] -> [Double] -> CCNF_ST s () Double #-}
+{-# SPECIALIZE INLINE envLineSeg :: [Double] -> [Double] -> CCNF_D () Double #-}
 
 noiseWhite :: ArrowInit a => Int -> a () Double
 noiseWhite seed =
@@ -90,20 +86,18 @@ noiseWhite seed =
         let (a,g') = randomDouble g 
         g <- init gen -< g'
       outA -< a * 2 - 1
+{-# SPECIALIZE INLINE noiseWhite :: Int -> CCNF_ST s () Double #-}
+{-# SPECIALIZE INLINE noiseWhite :: Int -> CCNF_D () Double #-}
 
 
-delayLine :: ArrowInit a =>
+delayLine :: ArrowInitLine a =>
          Double -> a Double Double
 delayLine maxdel =
     let sr = audioRate 
         sz = truncate (sr * maxdel)
-        buf = mkBuf sz
-    in proc x -> do
-        rec
-          let i' = if i == sz-1 then 0 else i+1
-          i <- init 0 -< i'
-          y <- init 0 -< x
-        outA -< unsafePerformIO $ updateBuf buf i y
+    in init 0 >>> initLine sz 0
+{-# SPECIALIZE INLINE delayLine :: Double -> CCNF_ST s Double Double #-}
+{-# SPECIALIZE INLINE delayLine :: Double -> CCNF_D Double Double #-}
 
 
 butter :: ArrowInit a => a (Double,ButterData) Double
@@ -113,6 +107,8 @@ butter = proc (sig, ButterData a1 a2 a3 a4 a5) -> do
         y'  <- init 0 -< t
         y'' <- init 0 -< y'
     outA -< y
+{-# SPECIALIZE INLINE butter :: CCNF_ST s (Double, ButterData) Double #-}
+{-# SPECIALIZE INLINE butter :: CCNF_D (Double, ButterData) Double #-}
 
 
 filterLowPassBW :: ArrowInit a => a (Double, Double) Double
@@ -120,6 +116,8 @@ filterLowPassBW =
   let sr = audioRate 
   in proc (sig, freq) -> do
        butter -< (sig, blpset freq sr)
+{-# SPECIALIZE INLINE filterLowPassBW :: CCNF_ST s (Double, Double) Double #-}
+{-# SPECIALIZE INLINE filterLowPassBW :: CCNF_D (Double, Double) Double #-}
 
 
 osc :: ArrowInit a =>
@@ -127,11 +125,9 @@ osc :: ArrowInit a =>
       -> Double  -- Initial phase of sampling, expressed as a
                  -- fraction of a cycle (0 to 1).
       -> a Double Double
-osc table iphs = osc_ iphs >>> readFromTableA table
-
-
-readFromTableA :: Arrow a => Table -> a Double Double
-readFromTableA = arr . readFromTable
+osc table iphs = osc_ iphs >>> arr (readFromTable table)
+{-# SPECIALIZE INLINE osc :: Table -> Double -> CCNF_ST s Double Double #-}
+{-# SPECIALIZE INLINE osc :: Table -> Double -> CCNF_D Double Double #-}
 
 
 osc_ :: ArrowInit a =>
@@ -144,8 +140,10 @@ osc_ phs =
             phase = if next > 1 then frac next else next
         next <- init phs -< frac (phase + delta)
       outA -< phase
+{-# SPECIALIZE INLINE osc_ :: Double -> CCNF_ST s Double Double #-}
+{-# SPECIALIZE INLINE osc_ :: Double -> CCNF_D Double Double #-}
 
-flute :: ArrowInit a => Time -> Double -> Double -> Double -> Double -> a () Double 
+flute :: ArrowInitLine a => Time -> Double -> Double -> Double -> Double -> a () Double 
 flute dur amp fqc press breath = 
   proc () -> do
     env1   <- envLineSeg  [0, 1.1*press, press, press, 0] 
@@ -161,24 +159,18 @@ flute dur amp fqc press breath =
          x      <- delayLine (1/fqc/2)  -< emb + flute*0.4
          out    <- filterLowPassBW -< (x-x*x*x + flute*0.4, 2000)
     outA -< out*amp*env2
+{-# SPECIALIZE INLINE flute :: Time -> Double -> Double -> Double -> Double -> CCNF_ST s () Double #-}
 {-# SPECIALIZE INLINE flute :: Time -> Double -> Double -> Double -> Double -> CCNF_D () Double #-}
-{-# SPECIALIZE INLINE flute :: Time -> Double -> Double -> Double -> Double -> SF () Double #-}
 
-shepard :: ArrowInit a => Time -> a () Double 
-{-
+shepard :: ArrowInitLine a => Time -> a () Double 
 shepard seconds = if seconds <= 0.0 then arr (const 0.0) else proc _ -> do
     f <- envLineSeg [800,100,100] [4.0, seconds] -< () -- frequency
     e <- envLineSeg [0, 1, 0, 0] [2.0, 2.0, seconds] -< () -- volume envelope
     s <- osc sineTable 0 -< f -- descending sine wave tone
     sRest <- delayLine 0.5 <<< shepard (seconds-0.5) -< () -- delayed other tones
     returnA -< (e * s * 0.1) + sRest
--}
-shepard seconds = if seconds <= 0.0 then arr (const 0.0) else (
-    arr (\x -> (x, (x, x))) >>> 
-    ((shepard (seconds - 0.5) >>> delayLine 0.5) ***
-    ((envLineSeg [800,100,100] [4.0, seconds] >>> osc sineTable 0) ***
-     (envLineSeg [0, 1, 0, 0] [2.0, 2.0, seconds]))) >>>
-    arr (\(x, (s, e)) -> e * s * 0.1 + x))
-
+{-# SPECIALIZE INLINE shepard :: Time -> CCNF_ST s () Double #-}
 {-# SPECIALIZE INLINE shepard :: Time -> CCNF_D () Double #-}
-{-# SPECIALIZE INLINE shepard :: Time -> SF () Double #-}
+
+
+

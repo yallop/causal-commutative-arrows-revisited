@@ -1,43 +1,12 @@
-{-# LANGUAGE EmptyDataDecls #-}
-module SoundFun where
+module SigFun where
 
 import Control.Category
 import Control.Arrow
 import Control.CCA.Types
-import Prelude hiding (init,id,(.))
-
--- generic Clock rate
-class Clock p where
-    rate :: p -> Double  -- sampling rate
-
-data AudRate
-data CtrRate
-
-instance Clock AudRate where
-    rate _ = 44100
-
-instance Clock CtrRate where
-    rate _ = 4410
-
--- a singal function that is generic in arrow and clock rate 
-newtype SigFun arr clk a b = SigFun { strip :: arr a b } -- deriving (Category, Arrow, ArrowLoop, ArrowInit)
-
-instance Category arr => Category (SigFun arr clk) where
-  id = SigFun id
-  SigFun x . SigFun y = SigFun (x . y)
-
-instance Arrow arr => Arrow (SigFun arr clk) where
-  arr f = SigFun (arr f)
-  first (SigFun f) = SigFun (first f)
-  second (SigFun f) = SigFun (second f)
-  SigFun f *** SigFun g = SigFun (f *** g)
-  SigFun f &&& SigFun g = SigFun (f &&& g)
-  
-instance ArrowLoop arr => ArrowLoop (SigFun arr clk) where
-  loop (SigFun f) = SigFun (loop f) 
-
-instance ArrowInit arr => ArrowInit (SigFun arr clk) where
-  init x = SigFun (init x)
+import Control.CCA.Instances
+import Data.IORef
+import System.IO.Unsafe
+import qualified Data.Vector.Unboxed.Mutable as MV
 
 -- The continuation based SF implementation
 newtype SF a b = SF { runSF :: (a -> (b, SF a b)) }
@@ -91,3 +60,20 @@ instance ArrowInit SF where
       f i x = 
         let (y, i') = g (x, i)
         in (y, SF (f i'))
+
+instance ArrowInitLine SF where
+  initLine size i = SF (f newBuf)
+    where
+      newBuf = unsafePerformIO $ do
+        b <- MV.new size 
+        MV.set b i
+        r <- newIORef 0
+        return (b, r)
+      f (b, r) x = unsafePerformIO $ do
+         i <- readIORef r
+         x' <- MV.unsafeRead b i
+         MV.unsafeWrite b i x
+         let i' = i + 1 
+         writeIORef r $ if i' >= size then 0 else i'
+         return (x', SF (f (b, r)))
+

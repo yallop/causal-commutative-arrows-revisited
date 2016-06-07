@@ -1,139 +1,34 @@
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
-{-# LANGUAGE TemplateHaskell, GADTs, TypeOperators, KindSignatures, Arrows #-}
+{-# LANGUAGE RankNTypes, TemplateHaskell, GADTs, TypeOperators, KindSignatures, Arrows #-}
 
 module Main where
 
 import Prelude hiding (init, exp, id, (.))
 import Control.Arrow
 import Control.Category
+import Control.Applicative
+import Control.Monad.ST
 import Control.CCA.CCNF (normOpt)
 import Control.CCA.Types
 import Control.CCA.Instances
 import Criterion.Main
-import qualified Sample as S
-
-integral :: ArrowInit arr => Double `arr` Double
-integral = loop (arr (\ (v, i) -> i + dt * v) >>>
-                 init 0 >>> arr dup)
-
-sr = 44100 :: Int
-dt = 1 / (fromIntegral sr) :: Double
-
-inp :: [()]
-inp = () : inp
-
-fixA :: ArrowLoop arr => a `arr` a -> b `arr` a
-fixA = \f -> loop (second f >>> arr snd >>> arr dup)
-
-exp :: ArrowInit arr => () `arr` Double
-exp = fixA (integral >>> arr (+1))
-
-fibA :: ArrowInit arr => arr () Integer
-fibA = proc _ -> do
-   rec let r = d2 + d1
-       d1 <- init 0 -< d2
-       d2 <- init 1 -< r
-   returnA -< r
-
-sine :: ArrowInit a => Double -> a () Double
-sine freq = proc _ -> do
-  rec x <- init i -< r
-      y <- init 0 -< x 
-      let r = c * x - y
-  returnA -< r
-  where
-    omh = 2 * pi / (fromIntegral sr) * freq
-    i = sin omh
-    c = 2 * cos omh
-{-# INLINE sine #-}
-
--- Causal stream transformers 
-newtype SF a b = SF { unSF :: a -> (b, SF a b) }
-
-instance Category SF where
-  id = arr id
-
-  g . f = SF (h f g)
-    where h (SF f) (SF g) x = let (y, f') = f x
-                                  (z, g') = g y
-                               in (z, SF (h f' g'))
-
-instance Arrow SF where
-  arr f = SF h
-    where h x = (f x, SF h)
-  first f = SF (h f)
-    where h (SF f) (x, z) = let (y, f') = f x  
-                             in ((y,z), SF (h f'))
-
-instance ArrowLoop SF where
-   loop = \f -> SF (h f)
-      where h (SF f) x = let ((y, z), f') = f (x, z)
-                          in (y, SF (h f'))
-
-instance ArrowInit SF where
-  init = \i -> SF (h i)
-    where h i x = (i, SF (h x))
-
-runSF :: SF a b -> [a] -> [b]
-runSF (SF f) (x:xs) = let (y, f') = f x
-                      in y : runSF f' xs
-
--- various approaches to evaluating 'exp'
-exp_unnormalized elem = nth elem exp 
-
-exp_normalized_b elem = nth elem (observeB exp)
-
-exp_normalized_d elem = nth elem (observeD exp)
-
-exp' :: CCNF_D () Double
-exp' = exp
-
-exp_normalized_direct_apply elem = nthCCNF_D elem exp'
-
-exp_normalized_th_nth elem = nth' elem $(normOpt S.exp)
-
-
--- various approaches to evaluating 'sine'
-sine_unnormalized :: Int -> Double
-sine_unnormalized elem = nth elem (sine 47.0)
-
-sine_normalized_b :: Int -> Double
-sine_normalized_b elem = nth elem (observeB (sine 47.0))
-
-sine_normalized_d :: Int -> Double
-sine_normalized_d elem = nth elem (observeD (sine 47.0))
-
-sine_normalized_direct_apply :: Int -> Double
-sine_normalized_direct_apply elem = nthCCNF_D elem (sine 47.0)
-
-sine_normalized_th_nth :: Int -> Double
-sine_normalized_th_nth elem = nth' elem $(normOpt (S.sine 47.0))
-
--- various approaches to evaluating 'fibA'
-fibA_unnormalized :: Int -> Integer
-fibA_unnormalized elem = nth elem fibA
-
-fibA_normalized_b :: Int -> Integer
-fibA_normalized_b elem = nth elem (observeB fibA)
-
-fibA_normalized_d :: Int -> Integer
-fibA_normalized_d elem = nth elem (observeD fibA)
-
-fibA_normalized_direct_apply :: Int -> Integer
-fibA_normalized_direct_apply elem = nthCCNF_D elem fibA
-
-fibA_normalized_th_nth :: Int -> Integer
-fibA_normalized_th_nth elem = nth' elem $(normOpt S.fibA)
+import qualified Sample
+import qualified SampleTH
+import SigFun -- For continuation based SF implementation
+import qualified Sound
+import qualified SoundTH
 
 nth :: Int -> SF () a -> a
 nth n (SF f) = x `seq` if n == 0 then x else nth (n - 1) f'
   where (x, f') = f ()
+{-# INLINE nth #-}
 
-nth' :: Int -> (b, ((), b) -> (a, b)) -> a
-nth' n (i, f) = aux n i
+nthTH :: Int -> (b, ((), b) -> (a, b)) -> a
+nthTH n (i, f) = aux n i
   where
     aux n i = x `seq` if n == 0 then x else aux (n-1) i'
       where (x, i') = f ((), i)
+{-# INLINE nthTH #-}
 
 nthCCNF_D :: Int -> CCNF_D () a -> a
 nthCCNF_D n (ArrD f) = f ()
@@ -141,11 +36,159 @@ nthCCNF_D n (LoopD i f) = aux n i
   where
     aux n i = x `seq` if n == 0 then x else aux (n-1) i'
      where (x, i') = f ((), i)
+{-# INLINE nthCCNF_D #-}
+
+-- Need a wrapper to existentially quantify s before we can use runST
+data NF_ST a b = NF_ST (forall s . CCNF_ST s a b)
+
+nthST :: Int -> NF_ST () a -> a
+nthST n (NF_ST nf) = runST (nthST' n nf)
+{-# INLINE nthST #-}
+
+nthST' :: Int -> CCNF_ST s () a -> ST s a
+nthST' n (ArrST f) = return (f ())
+nthST' n (LoopST i f) = do
+  g <- (f $) <$> i
+  next g n
+  where 
+    next g n = do 
+      x <- g ()
+      x `seq` if n <= 0 then return x else next g (n-1)
+    {-# INLINE next #-}
+{-# INLINE nthST' #-}
+
+-- various approaches to evaluating 'exp'
+exp_unnormalized elem = nth elem Sample.exp 
+
+exp_normalized_b elem = nth elem (observeB Sample.exp)
+
+exp_normalized_d elem = nth elem (observeD Sample.exp)
+
+exp_normalized_nf elem = nthCCNF_D elem Sample.exp
+
+exp_normalized_st elem = nthST elem $ NF_ST Sample.exp
+
+exp_normalized_th elem = nthTH elem $(normOpt SampleTH.exp)
 
 
+-- various approaches to evaluating 'sine'
+sine_unnormalized :: Int -> Double
+sine_unnormalized elem = nth elem (Sample.sine 47.0)
+
+sine_normalized_b :: Int -> Double
+sine_normalized_b elem = nth elem (observeB (Sample.sine 47.0))
+
+sine_normalized_d :: Int -> Double
+sine_normalized_d elem = nth elem (observeD (Sample.sine 47.0))
+
+sine_normalized_nf :: Int -> Double
+sine_normalized_nf elem = nthCCNF_D elem (Sample.sine 47.0)
+
+sine_normalized_st :: Int -> Double
+sine_normalized_st elem = nthST elem $ NF_ST (Sample.sine 47.0)
+
+sine_normalized_th :: Int -> Double
+sine_normalized_th elem = nthTH elem $(normOpt (SampleTH.sine 47.0))
+
+-- various approaches to evaluating 'fibA'
+fibA_unnormalized :: Int -> Integer
+fibA_unnormalized elem = nth elem Sample.fibA
+
+fibA_normalized_b :: Int -> Integer
+fibA_normalized_b elem = nth elem (observeB Sample.fibA)
+
+fibA_normalized_d :: Int -> Integer
+fibA_normalized_d elem = nth elem (observeD Sample.fibA)
+
+fibA_normalized_nf :: Int -> Integer
+fibA_normalized_nf elem = nthCCNF_D elem Sample.fibA
+
+fibA_normalized_st :: Int -> Integer
+fibA_normalized_st elem = nthST elem $ NF_ST Sample.fibA
+
+fibA_normalized_th :: Int -> Integer
+fibA_normalized_th elem = nthTH elem $(normOpt SampleTH.fibA)
+
+-- various approaches to evaluating 'oscSineA'
+oscSineA_unnormalized elem = nth elem Sample.oscSineA 
+
+oscSineA_normalized_b elem = nth elem (observeB Sample.oscSineA)
+
+oscSineA_normalized_d elem = nth elem (observeD Sample.oscSineA)
+
+oscSineA_normalized_nf elem = nthCCNF_D elem Sample.oscSineA
+
+oscSineA_normalized_st elem = nthST elem $ NF_ST Sample.oscSineA
+
+oscSineA_normalized_th elem = nthTH elem $(normOpt SampleTH.oscSineA)
+
+-- various approaches to evaluating 'sciFi'
+sciFi_unnormalized elem = nth elem Sample.sciFi 
+
+sciFi_normalized_b elem = nth elem (observeB Sample.sciFi)
+
+sciFi_normalized_d elem = nth elem (observeD Sample.sciFi)
+
+sciFi_normalized_nf elem = nthCCNF_D elem Sample.sciFi
+
+sciFi_normalized_st elem = nthST elem $ NF_ST Sample.sciFi
+
+sciFi_normalized_th elem = nthTH elem $(normOpt SampleTH.sciFi)
+
+-- various approaches to evaluating 'robotA'
+robotA_unnormalized elem = nth elem Sample.robotA 
+
+robotA_normalized_b elem = nth elem (observeB Sample.robotA)
+
+robotA_normalized_d elem = nth elem (observeD Sample.robotA)
+
+robotA_normalized_nf elem = nthCCNF_D elem Sample.robotA
+
+robotA_normalized_st elem = nthST elem $ NF_ST Sample.robotA
+
+robotA_normalized_th elem = nthTH elem $(normOpt SampleTH.robotA)
+
+-- various approaches to evaluating 'flute'
+flute :: ArrowInitLine a => a () Double 
+flute = Sound.flute 5 0.3 440 0.99 0.2
+
+flute_unnormalized elem = nth elem flute
+
+-- flute_normalized_b elem = nth elem (observeB flute)
+
+flute_normalized_d elem = nth elem (observeD flute)
+
+flute_normalized_nf elem = nthCCNF_D elem flute
+
+flute_normalized_st elem = nthST elem $ NF_ST flute
+
+flute_normalized_th elem = nthTH elem $(normOpt $ SoundTH.flute 5 0.3 440 0.99 0.2)
+
+-- various approaches to evaluating 'shepard'
+shepard :: ArrowInitLine a => a () Double 
+shepard = Sound.shepard 5 
+
+shepard_unnormalized elem = nth elem shepard
+
+-- shepard_normalized_b elem = nth elem (observeB shepard)
+
+shepard_normalized_d elem = nth elem (observeD shepard)
+
+shepard_normalized_nf elem = nthCCNF_D elem shepard
+
+shepard_normalized_st elem = nthST elem $ NF_ST shepard
+
+shepard_normalized_th elem = nthTH elem $(normOpt $ SoundTH.shepard 5)
+
+-- how many elements to evaluate
 exp_element = 30000
 fibA_element = 30000
-sine_element = 30000
+sine_element = 1000000
+oscSineA_element = 30000
+sciFi_element = 30000
+robotA_element = 1000000
+flute_element = 44100 * 5
+shepard_element = 44100 * 5
 
 main :: IO ()
 main = do
@@ -153,48 +196,131 @@ main = do
   bgroup "exp" [ bench "exp (unnormalized)" $
                  nf (exp_unnormalized) exp_element
 
-               , bench "exp (loopB-normalized)" $
-                 nf (exp_normalized_b) exp_element
-
                , bench "exp (loopD-normalized)" $
                  nf (exp_normalized_d) exp_element
 
-               , bench "exp (loopD-normalized, with runCCNF)" $
-                 nf (exp_normalized_direct_apply) exp_element
+               , bench "exp (loopD-normalized, with nthCCNF)" $
+                 nf (exp_normalized_nf) exp_element
+
+               , bench "exp (loopD-normalized, with nthST)" $
+                 nf (exp_normalized_st) exp_element
 
                , bench "exp (loopD-normalized, with CCA TH)" $
-                 nf (exp_normalized_th_nth) exp_element
+                 nf (exp_normalized_th) exp_element
                ],
 
   bgroup "sine" [ bench "sine (unnormalized)" $
                  nf (sine_unnormalized) sine_element
 
-               , bench "sine (loopB-normalized)" $
-                 nf (sine_normalized_b) sine_element
-
                , bench "sine (loopD-normalized)" $
                  nf (sine_normalized_d) sine_element
 
-               , bench "sine (loopD-normalized, with runCCNF)" $
-                 nf (sine_normalized_direct_apply) sine_element
+               , bench "sine (loopD-normalized, with nthCCNF)" $
+                 nf (sine_normalized_nf) sine_element
+
+               , bench "sine (loopD-normalized, with nthST)" $
+                 nf (sine_normalized_st) sine_element
 
                , bench "sine (loopD-normalized, with CCA TH)" $
-                 nf (sine_normalized_th_nth) sine_element
+                 nf (sine_normalized_th) sine_element
                ],
 
   bgroup "fibA" [ bench "fibA (unnormalized)" $
                  nf (fibA_unnormalized) fibA_element
 
-               , bench "fibA (loopB-normalized)" $
-                 nf (fibA_normalized_b) fibA_element
-
-               , bench "fibA (loopD-normalized)" $
+                 , bench "fibA (loopD-normalized)" $
                  nf (fibA_normalized_d) fibA_element
 
-               , bench "fibA (loopD-normalized, with runCCNF)" $
-                 nf (fibA_normalized_direct_apply) fibA_element
+               , bench "fibA (loopD-normalized, with nthCCNF)" $
+                 nf (fibA_normalized_nf) fibA_element
+
+               , bench "fibA (loopD-normalized, with nthST)" $
+                 nf (fibA_normalized_st) fibA_element
 
                , bench "fibA (loopD-normalized, with CCA TH)" $
-                 nf (fibA_normalized_th_nth) fibA_element
+                 nf (fibA_normalized_th) fibA_element
+               ],
+
+  bgroup "oscSineA" [ bench "oscSineA (unnormalized)" $
+                 nf (oscSineA_unnormalized) oscSineA_element
+
+               , bench "oscSineA (loopD-normalized)" $
+                 nf (oscSineA_normalized_d) oscSineA_element
+
+               , bench "oscSineA (loopD-normalized, with nthCCNF)" $
+                 nf (oscSineA_normalized_nf) oscSineA_element
+
+               , bench "oscSineA (loopD-normalized, with nthST)" $
+                 nf (oscSineA_normalized_st) oscSineA_element
+
+               , bench "oscSineA (loopD-normalized, with CCA TH)" $
+                 nf (oscSineA_normalized_th) oscSineA_element
+               ],
+
+  bgroup "sciFi" [ bench "sciFi (unnormalized)" $
+                 nf (sciFi_unnormalized) sciFi_element
+
+               , bench "sciFi (loopD-normalized)" $
+                 nf (sciFi_normalized_d) sciFi_element
+
+               , bench "sciFi (loopD-normalized, with nthCCNF)" $
+                 nf (sciFi_normalized_nf) sciFi_element
+
+               , bench "sciFi (loopD-normalized, with nthST)" $
+                 nf (sciFi_normalized_st) sciFi_element
+
+               , bench "sciFi (loopD-normalized, with CCA TH)" $
+                 nf (sciFi_normalized_th) sciFi_element
+               ],
+
+
+  bgroup "robotA" [ bench "robotA (unnormalized)" $
+                 nf (robotA_unnormalized) robotA_element
+
+               , bench "robotA (loopD-normalized)" $
+                 nf (robotA_normalized_d) robotA_element
+
+               , bench "robotA (loopD-normalized, with nthCCNF)" $
+                 nf (robotA_normalized_nf) robotA_element
+
+               , bench "robotA (loopD-normalized, with nthST)" $
+                 nf (robotA_normalized_st) robotA_element
+
+               , bench "robotA (loopD-normalized, with CCA TH)" $
+                 nf (robotA_normalized_th) robotA_element
+               ],
+
+  bgroup "flute" [ bench "flute (unnormalized)" $
+                 nf (flute_unnormalized) flute_element
+
+               , bench "flute (loopD-normalized)" $
+                 nf (flute_normalized_d) flute_element
+
+               , bench "flute (loopD-normalized, with nthCCNF)" $
+                 nf (flute_normalized_nf) flute_element
+
+               , bench "flute (loopD-normalized, with nthST)" $
+                 nf (flute_normalized_st) flute_element
+
+               , bench "flute (loopD-normalized, with CCA TH)" $
+                 nf (flute_normalized_th) flute_element
+               ],
+
+  bgroup "shepard" [ bench "shepard (unnormalized)" $
+                 nf (shepard_unnormalized) shepard_element
+
+               , bench "shepard (loopD-normalized)" $
+                 nf (shepard_normalized_d) shepard_element
+
+               , bench "shepard (loopD-normalized, with nthCCNF)" $
+                 nf (shepard_normalized_nf) shepard_element
+
+               , bench "shepard (loopD-normalized, with nthST)" $
+                 nf (shepard_normalized_st) shepard_element
+
+               , bench "shepard (loopD-normalized, with CCA TH)" $
+                 nf (shepard_normalized_th) shepard_element
                ]
+
+
   ]

@@ -119,6 +119,7 @@ sine freq = proc _ -> do
     omh = 2 * pi / (fromIntegral sr) * freq
     i = sin omh
     c = 2 * cos omh
+{-# SPECIALIZE INLINE sine :: Double -> CCNF () Double #-}
 
 {-
 sine :: ArrowInit a => Double -> a () Double
