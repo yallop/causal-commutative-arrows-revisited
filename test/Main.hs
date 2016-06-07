@@ -181,14 +181,15 @@ shepard_normalized_st elem = nthST elem $ NF_ST shepard
 shepard_normalized_th elem = nthTH elem $(normOpt $ SoundTH.shepard 5)
 
 -- how many elements to evaluate
-exp_element = 30000
-fibA_element = 30000
-sine_element = 1000000
-oscSineA_element = 30000
-sciFi_element = 30000
-robotA_element = 1000000
-flute_element = 44100 * 5
-shepard_element = 44100 * 5
+n = 44100 * 5
+exp_element = n
+fibA_element = n
+sine_element = n
+oscSineA_element = n
+sciFi_element = n
+robotA_element = n
+flute_element = n
+shepard_element = n
 
 main :: IO ()
 main = do
