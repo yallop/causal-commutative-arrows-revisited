@@ -343,4 +343,23 @@ instance ArrowInitLine CCNF_D where
          writeIORef r $ if i' >= size then 0 else i'
          return (x', s)
 
+-- The following normalization rules do not seem to work at all for SF, why?
+{- RULES
+"CCA/composition"  [0] forall f g. arr g . arr f = arr (g . f)
+"CCA/lefttightening" [0]  forall i f g. loopD i g . arr f = loopD i (g . first f)
+"CCA/righttightening" [0] forall i f g. arr g . loopD i f = loopD i (first g . f)
+"CCA/sequencing" [0] forall i j f g. loopD j g . loopD i f = loopD (i, j) (assoc' (juggle' (first g) . first f))
+"CCA/extension" [0] forall f. first (arr f) = arr (first f)
+"CCA/superposing" [0] forall i f. first (loopD i f) = loopD i (juggle' (first f))
+"CCA/loopextension" [0] forall f. loop (arr f) = arr (trace f)
+"CCA/vanishing" [0] forall i f. loop (loopD i f) = loopD i (trace (juggle' f))
+-}
+
+-- The following two rules can turn loopD from function into data type, which
+-- helps with writing generic arrows directly in CCNF, had loopD not been
+-- provided as a class function of ArrowInit.
+{- RULES
+"LoopD/CCNF_D"  [1] forall i f. loopD i f = LoopD i f
+"loopD/CCNF_ST" [1] forall i f. loopD i f = LoopST (newSTRef i) (loopSTAux f)
+-}
 
