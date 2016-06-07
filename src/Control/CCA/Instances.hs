@@ -82,6 +82,7 @@ applyCCNF_D (LoopD i f) = runCCNF i f
    runCCNF i f = g i
      where g i (x:xs) = let (y, i') = f (x, i)
                         in y : g i' xs
+           g i [] = []
 
 -- CCNF_D is an instance of ArrowInit (and hence of the superclasses
 -- ArrowLoop, Arrow and Category)
@@ -173,6 +174,7 @@ applyCCNF_D' (LoopD' i f) = runCCNF i f
    runCCNF i f = g i
      where g i (x:xs) = let (y, i') = f (x, i)
                         in y : g i' xs
+           g i [] = []
 
 -- CCNF_D' is an instance of ArrowInit (and hence of the superclasses
 -- ArrowLoop, Arrow and Category)
