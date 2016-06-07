@@ -300,6 +300,13 @@ instance ArrowInit (CCNF_ST s) where
          y <- readSTRef i
          writeSTRef i x
          return y
+   loopD i f = LoopST (newSTRef i) (loopSTAux f)
+
+loopSTAux f i x = do
+  u <- readSTRef i
+  let (y, v) = f (x, u)
+  writeSTRef i v
+  return y
 
 class ArrowInit a => ArrowInitLine a where
    initLine :: MV.Unbox b => Int -> b -> a b b

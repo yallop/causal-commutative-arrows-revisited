@@ -19,12 +19,18 @@ exp = proc () -> do
 -- {-# SPECIALIZE INLINE exp :: SF () Double #-} 
 {-# SPECIALIZE INLINE exp :: CCNF_D () Double #-}
 {-# SPECIALIZE INLINE exp :: CCNF_ST s () Double #-}
-
 integral :: ArrowInit a => a Double Double
 integral = proc x -> do
   rec let i' = i + x * dt
       i <- init 0 -< i'
   returnA -< i
+
+-- alternatively, we could define intergral directly as loopD,
+-- which helps CCNF_ST signficantly by skip the direct use of
+-- loop combinator, because loop uses mfix with a significant 
+-- overhead.
+
+-- integral = loopD 0 (\ (x, i) -> (i, i + dt * x)) 
 
 sine :: ArrowInit a => Double -> a () Double
 sine freq = proc _ -> do
