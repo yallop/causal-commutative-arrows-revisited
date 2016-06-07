@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
-{-# LANGUAGE RankNTypes, TemplateHaskell, GADTs, TypeOperators, KindSignatures, Arrows #-}
+{-# LANGUAGE BangPatterns, RankNTypes, TemplateHaskell, GADTs, TypeOperators, KindSignatures, Arrows #-}
 
 module Main where
 
@@ -26,7 +26,7 @@ nth n (SF f) = x `seq` if n == 0 then x else nth (n - 1) f'
 nthTH :: Int -> (b, ((), b) -> (a, b)) -> a
 nthTH n (i, f) = aux n i
   where
-    aux n i = x `seq` if n == 0 then x else aux (n-1) i'
+    aux !n !i = x `seq` if n == 0 then x else aux (n-1) i'
       where (x, i') = f ((), i)
 {-# INLINE nthTH #-}
 
@@ -34,7 +34,7 @@ nthCCNF_D :: Int -> CCNF_D () a -> a
 nthCCNF_D n (ArrD f) = f ()
 nthCCNF_D n (LoopD i f) = aux n i
   where
-    aux n i = x `seq` if n == 0 then x else aux (n-1) i'
+    aux !n !i = x `seq` if n == 0 then x else aux (n-1) i'
      where (x, i') = f ((), i)
 {-# INLINE nthCCNF_D #-}
 
