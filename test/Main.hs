@@ -49,12 +49,10 @@ nthST' :: Int -> CCNF_ST s () a -> ST s a
 nthST' n (ArrST f) = return (f ())
 nthST' n (LoopST i f) = do
   g <- (f $) <$> i
-  next g n
-  where 
-    next g n = do 
+  let next n = do 
       x <- g ()
-      x `seq` if n <= 0 then return x else next g (n-1)
-    {-# INLINE next #-}
+      x `seq` if n <= 0 then return x else next (n-1)
+  next n
 {-# INLINE nthST' #-}
 
 -- various approaches to evaluating 'exp'
