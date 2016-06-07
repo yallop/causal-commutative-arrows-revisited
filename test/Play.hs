@@ -59,19 +59,19 @@ unfoldNF = unfoldCCNF_D
 playlist = 
   [ ("-th",        -- Template Haskell optimized to CCNF
         [ ("flute",   (5.0, unfoldTH fluteTH))
-        , ("shepard", (16.0, unfoldTH shepardTH))
+        , ("shepard", (5.0, unfoldTH shepardTH))
         ])
   , ("-nf",        -- CCNF based arrows
         [ ("flute",   (5.0, unfoldNF fluteNF))
-        , ("shepard", (16.0, unfoldNF shepardNF))
+        , ("shepard", (5.0, unfoldNF shepardNF))
         ])
   , ("-st",        -- SF based arrows
         [ ("flute",   (5.0, unfoldST fluteST))
-        , ("shepard", (16.0, unfoldST shepardST))
+        , ("shepard", (5.0, unfoldST shepardST))
         ])
   , ("-sf",        -- SF based arrows
         [ ("flute",   (5.0, unfoldSF fluteSF))
-        , ("shepard", (16.0, unfoldSF shepardSF))
+        , ("shepard", (5.0, unfoldSF shepardSF))
         ])
   ]
 
@@ -82,9 +82,9 @@ main = do
   case arg of
     [ opt, name ] -> 
       case lookup opt playlist >>= lookup name of
-        Just (dur, stream) -> outFile (name ++ ".wav") dur stream
+        Just (dur, stream) -> outFile (name ++ opt ++ ".wav") dur stream
         _ -> usage
-    [ name ] -> case lookup "template" playlist >>= lookup name of
+    [ name ] -> case lookup "-st" playlist >>= lookup name of
         Just (dur, stream) -> outFile (name ++ ".wav") dur stream
         _ -> usage
     _ -> usage
@@ -110,19 +110,19 @@ fluteNF :: CCNF_D () Double
 fluteNF = Sound.flute 5 0.3 440 0.99 0.2 
 
 shepardNF :: CCNF_D () Double
-shepardNF = Sound.shepard 16.0 
+shepardNF = Sound.shepard 5.0 
 
 fluteSF :: SF () Double
 fluteSF = Sound.flute 5 0.3 440 0.99 0.2 
 
 shepardSF :: SF () Double
-shepardSF = Sound.shepard 16.0 
+shepardSF = Sound.shepard 5.0 
 
 fluteST :: NF_ST () Double
 fluteST = NF_ST $ Sound.flute 5 0.3 440 0.99 0.2 
 
 shepardST :: NF_ST () Double
-shepardST = NF_ST $ Sound.shepard 16.0 
+shepardST = NF_ST $ Sound.shepard 5.0 
 
 -- Need a wrapper to existentially quantify s before we can use runST
 data NF_ST a b = NF_ST (forall s . CCNF_ST s a b)

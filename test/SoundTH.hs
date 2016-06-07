@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeSynonymInstances, FlexibleInstances, TemplateHaskell #-}
 {-# LINE 1 "Sound.as" #-}
 module SoundTH where
 {-# LINE 3 "Sound.as" #-}
@@ -13,14 +13,18 @@ import SoundAux
 {-# LINE 7 "Sound.as" #-}
 import System.Random.Mersenne.Pure64
 {-# LINE 8 "Sound.as" #-}
+import Data.IORef
 import System.IO.Unsafe
 {-# LINE 9 "Sound.as" #-}
 import qualified Data.Vector.Unboxed as V
 
 instance (V.Unbox a, Lift a) => Lift (V.Vector a) where
   lift v = [| V.fromList $(lift $ V.toList v) |]
- 
-{-# LINE 11 "Sound.as" #-}
+
+instance Lift a => Lift (IORef a) where
+  lift x = [| unsafePerformIO $ newIORef $(lift $ unsafePerformIO $ readIORef x) |]
+
+ {-# LINE 11 "Sound.as" #-}
 seghlp ::
        (ArrowInit a) =>
          [Double] -> [Double] -> a () (Double, Double, Double, Double)
@@ -164,28 +168,13 @@ delayLine maxdel
         {-# LINE 70 "Sound.as" #-}
         sz = truncate (sr * maxdel)
         {-# LINE 71 "Sound.as" #-}
-        buf = mkBuf sz
-      in
-      (loop
-         (((arr'
-              [|
-                (\ (x, i) ->
-                   let {-# LINE 74 "Sound.as" #-}
-                       i' = if i == sz - 1 then 0 else i + 1
-                     in (i', x))
-                |]
-              (\ (x, i) ->
-                 let {-# LINE 74 "Sound.as" #-}
-                     i' = if i == sz - 1 then 0 else i + 1
-                   in (i', x))
-              >>> first (init' [| 0 |] 0))
-             >>> arr' [| (\ (i, x) -> (x, i)) |] (\ (i, x) -> (x, i)))
-            >>>
-            (first (init' [| 0 |] 0) >>>
-               arr' [| (\ (y, i) -> ((i, y), i)) |] (\ (y, i) -> ((i, y), i))))
-         >>>
+      in init' [| 0 |] 0 >>> loop (arr' [| updateBuf |] updateBuf >>> 
+        arr' [| \ ~(x,y) -> (y,x) |] (\ ~(x,y) -> (y,x)) >>> first (init' [| newBuf sz 0 |] (newBuf sz 0)) >>>
+        arr' [| \ ~(x,y) -> (y,x) |] (\ ~(x,y) -> (y,x)))
+{-
          arr' [| let buf = mkBuf sz in (\ (i, y) -> unsafePerformIO $ updateBuf buf i y) |]
            (\ (i, y) -> unsafePerformIO $ updateBuf buf i y))
+-}
  
 {-# LINE 79 "Sound.as" #-}
 butter :: (ArrowInit a) => a (Double, ButterData) Double

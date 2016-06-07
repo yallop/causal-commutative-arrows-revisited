@@ -1,11 +1,10 @@
 {-# LANGUAGE BangPatterns #-}
 module SoundAux where
 
-import Foreign.Marshal
-import Foreign.Ptr
-import Foreign.Storable
 import System.IO.Unsafe
+import Data.IORef
 import qualified Data.Vector.Unboxed as V
+import qualified Data.Vector.Unboxed.Mutable as MV
 
 audioRate = 44100 :: Double
 
@@ -20,18 +19,22 @@ type PartialStrength = Double
 -- type SegLength       = Double
 -- type EndPt           = Double
 
-data Buf = Buf !Int !(Ptr Double)
+newBuf :: Int -> Double -> (MV.IOVector Double, IORef Int)
+newBuf size i = unsafePerformIO $ do
+  b <- MV.new size 
+  MV.set b i
+  r <- newIORef 0
+  return (b, r)
 
-updateBuf :: Buf -> Int -> Double -> IO Double
-updateBuf (Buf _ a) i u = a `seq` i `seq` u `seq` do
-    let p = a `advancePtr` i
-    x' <- peek p
-    poke p u
-    return x'
-
-mkBuf :: Int -> Buf
-mkBuf n = n `seq` Buf n (unsafePerformIO $
-            Foreign.Marshal.newArray (replicate n 0))
+updateBuf :: (Double, (MV.IOVector Double, IORef Int)) -> (Double, (MV.IOVector Double, IORef Int))
+updateBuf (x, s@(b, r)) = unsafePerformIO $ do
+  let size = MV.length b
+  i <- readIORef r
+  x' <- MV.unsafeRead b i
+  MV.unsafeWrite b i x
+  let i' = i + 1 
+  writeIORef r $ if i' >= size then 0 else i'
+  return (x', s)
 
 sqrt2 :: Double
 sqrt2 = sqrt 2
