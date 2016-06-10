@@ -38,17 +38,14 @@ nthCCNF_D n (LoopD i f) = aux n i
      where (x, i') = f ((), i)
 {-# INLINE nthCCNF_D #-}
 
--- Need a wrapper to existentially quantify s before we can use runST
-data NF_ST a b = NF_ST (forall s . CCNF_ST s a b)
-
-nthST :: Int -> NF_ST () a -> a
-nthST n (NF_ST nf) = runST (nthST' n nf)
+nthST :: Int -> (forall s . CCNF_ST s () a) -> a
+nthST n nf = runST (nthST' n nf)
 {-# INLINE nthST #-}
 
 nthST' :: Int -> CCNF_ST s () a -> ST s a
 nthST' n (ArrST f) = return (f ())
 nthST' n (LoopST i f) = do
-  g <- (f $) <$> i
+  g <- fmap f i
   let next n = do 
       x <- g ()
       x `seq` if n <= 0 then return x else next (n-1)
@@ -64,7 +61,7 @@ exp_normalized_d elem = nth elem (observeD Sample.exp)
 
 exp_normalized_nf elem = nthCCNF_D elem Sample.exp
 
-exp_normalized_st elem = nthST elem $ NF_ST Sample.exp
+exp_normalized_st elem = nthST elem $ Sample.exp
 
 exp_normalized_th elem = nthTH elem $(normOpt SampleTH.exp)
 
@@ -83,7 +80,7 @@ sine_normalized_nf :: Int -> Double
 sine_normalized_nf elem = nthCCNF_D elem (Sample.sine 47.0)
 
 sine_normalized_st :: Int -> Double
-sine_normalized_st elem = nthST elem $ NF_ST (Sample.sine 47.0)
+sine_normalized_st elem = nthST elem $ (Sample.sine 47.0)
 
 sine_normalized_th :: Int -> Double
 sine_normalized_th elem = nthTH elem $(normOpt (SampleTH.sine 47.0))
@@ -102,7 +99,7 @@ fibA_normalized_nf :: Int -> Integer
 fibA_normalized_nf elem = nthCCNF_D elem Sample.fibA
 
 fibA_normalized_st :: Int -> Integer
-fibA_normalized_st elem = nthST elem $ NF_ST Sample.fibA
+fibA_normalized_st elem = nthST elem $ Sample.fibA
 
 fibA_normalized_th :: Int -> Integer
 fibA_normalized_th elem = nthTH elem $(normOpt SampleTH.fibA)
@@ -116,7 +113,7 @@ oscSineA_normalized_d elem = nth elem (observeD Sample.oscSineA)
 
 oscSineA_normalized_nf elem = nthCCNF_D elem Sample.oscSineA
 
-oscSineA_normalized_st elem = nthST elem $ NF_ST Sample.oscSineA
+oscSineA_normalized_st elem = nthST elem $ Sample.oscSineA
 
 oscSineA_normalized_th elem = nthTH elem $(normOpt SampleTH.oscSineA)
 
@@ -129,7 +126,7 @@ sciFi_normalized_d elem = nth elem (observeD Sample.sciFi)
 
 sciFi_normalized_nf elem = nthCCNF_D elem Sample.sciFi
 
-sciFi_normalized_st elem = nthST elem $ NF_ST Sample.sciFi
+sciFi_normalized_st elem = nthST elem $ Sample.sciFi
 
 sciFi_normalized_th elem = nthTH elem $(normOpt SampleTH.sciFi)
 
@@ -142,7 +139,7 @@ robotA_normalized_d elem = nth elem (observeD Sample.robotA)
 
 robotA_normalized_nf elem = nthCCNF_D elem Sample.robotA
 
-robotA_normalized_st elem = nthST elem $ NF_ST Sample.robotA
+robotA_normalized_st elem = nthST elem $ Sample.robotA
 
 robotA_normalized_th elem = nthTH elem $(normOpt SampleTH.robotA)
 
@@ -158,7 +155,7 @@ flute_normalized_d elem = nth elem (observeD flute)
 
 flute_normalized_nf elem = nthCCNF_D elem flute
 
-flute_normalized_st elem = nthST elem $ NF_ST flute
+flute_normalized_st elem = nthST elem $ flute
 
 flute_normalized_th elem = nthTH elem $(normOpt $ SoundTH.flute 5 0.3 440 0.99 0.2)
 
@@ -174,7 +171,7 @@ shepard_normalized_d elem = nth elem (observeD shepard)
 
 shepard_normalized_nf elem = nthCCNF_D elem shepard
 
-shepard_normalized_st elem = nthST elem $ NF_ST shepard
+shepard_normalized_st elem = nthST elem $ shepard
 
 shepard_normalized_th elem = nthTH elem $(normOpt $ SoundTH.shepard 5)
 
