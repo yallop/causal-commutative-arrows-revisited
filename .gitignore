@@ -1,14 +1,5 @@
 *~
 dist
-paper/paper.aux
-paper/paper.bbl
-paper/paper.blg
-paper/paper.log
-paper/paper.pdf
-paper/paper.ptb
-paper/paper.tex
-paper/paper.txt
-paper/texput.log
 *.o
 *.hi
 *.hs
