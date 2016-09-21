@@ -3,7 +3,7 @@ Version:        0.0.1
 Build-Type:     Simple
 License:        MIT
 Cabal-version:  >= 1.8
-Author:         Jeremy Yallop <yallop@gmail.com>
+Author:         Jeremy Yallop <yallop@gmail.com>, Paul H Liu <paul@thev.net>
 
 library
   build-depends:   CCA, base, transformers, ghc, ghc-prim, containers, vector
